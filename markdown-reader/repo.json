@@ -1,0 +1,13 @@
+[{
+  "Name": "markdown-reader",
+  "Description": "Distraction-free Markdown reader mode with prompt-to-edit and faded syntax highlighting",
+  "Tags": ["markdown", "reader", "syntax"],
+  "Versions": [
+    {
+      "Version": "1.0.0",
+      "Require": {
+        "micro": ">=2.0.8"
+      }
+    }
+  ]
+}]

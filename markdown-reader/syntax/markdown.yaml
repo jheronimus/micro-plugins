@@ -1,0 +1,58 @@
+filetype: markdown
+
+detect:
+    filename: "\\.(livemd|md|mkd|mkdn|markdown)$"
+
+rules:
+    # Fenced Code Blocks
+    - constant.string:
+        start: "^```.*$"
+        end: "^```$"
+        rules: []
+
+    # Inline Code
+    - constant.string: "(`[^`]+`)"
+
+    # Headers (H1-H6) with subtle header markers
+    - special: "^# .*$"
+    - special: "^## .*$"
+    - special: "^### .*$"
+    - special: "^#### .*$"
+    - special: "^##### .*$"
+    - special: "^###### .*$"
+
+    # Faded Markdown Syntax Tokens
+    - comment: "(^#{1,6}[[:space:]]+)"
+    - comment: "(^|[[:space:]])(\\*\\*|__)"
+    - comment: "(\\*\\*|__)($|[[:space:]])"
+    - comment: "(^|[[:space:]])(\\*|_)"
+    - comment: "(\\*|_)($|[[:space:]])"
+    - comment: "(~~)"
+    - comment: "(^>+[[:space:]]*)"
+    - comment: "(^[-*+][[:space:]]+(\\[[ xX]\\][[:space:]]+)?)"
+    - comment: "(^[0-9]+\\.[[:space:]]+)"
+    - comment: "(\\[|\\]|\\(|\\))"
+    - comment: "(^```[a-zA-Z0-9_-]*|```$)"
+    - comment: "(^---+|===+|___+|\\*\\*\\*+)\\s*$"
+
+    # Blockquotes
+    - identifier: "^>.*"
+
+    # Strong / Bold Emphasis
+    - bold: "(^|[[:space:]])(__[^ ][^_]*__|\\*\\*[^ ][^*]*\\*\\*)"
+
+    # Emphasis / Italic
+    - italic: "(^|[[:space:]])(_[^ ][^_]*_|\\*[^ ][^*]*\\*)"
+
+    # Strikethrough
+    - statement: "(^|[[:space:]])~~[^ ][^~]*~~"
+
+    # Links and Images [text](url)
+    - underlined: "\\[([^\\]]+)\\]\\(([^\\)]+)\\)"
+    - constant: "!\\[([^\\]]*)\\]\\(([^\\)]+)\\)"
+
+    # Tables (GitHub Markdown)
+    - type: ".*[ :]\\|[ :].*"
+
+    # Horizontal rules
+    - statement: "^(---+|===+|___+|\\*\\*\\*+)\\s*$"
