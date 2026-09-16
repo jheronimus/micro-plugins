@@ -50,9 +50,7 @@ function parseOptions(inputstr)
 	return mysplit(inputstr, ",")
 end
 
-function startServer(filetype, callback, targetBuf)
-	local wd, _ = go_os.Getwd()
-	rootUri = fmt.Sprintf("file://%s", wd)
+local function resolveServerSettings()
 	local envSettings, _ = go_os.Getenv("MICRO_LSP")
 	local settings = config.GetGlobalOption("lsp.server")
 	local fallback =
@@ -61,55 +59,68 @@ function startServer(filetype, callback, targetBuf)
 		settings = envSettings
 	end
 	if settings ~= nil and #settings > 0 then
-		settings = settings .. "," .. fallback
-	else
-		settings = fallback
+		return settings .. "," .. fallback
 	end
+	return fallback
+end
+
+local function decodeArgs(args)
+	for idx, narg in ipairs(args) do
+		args[idx] = narg:gsub("%%[a-zA-Z0-9][a-zA-Z0-9]", function(entry)
+			return string.char(tonumber(entry:sub(2), 16))
+		end)
+	end
+	return args
+end
+
+local function launchServer(part, filetype, callback, targetBuf)
+	local run = mysplit(part[2] or "", "%s")
+	local initOptions = config.GetGlobalOption("lsp." .. part[1]) or part[3] or "{}"
+	local runCmd = table.remove(run, 1)
+	local args = decodeArgs(run)
+	local send = withSend(part[1])
+	if cmd[part[1]] ~= nil then
+		return
+	end
+	id[part[1]] = 0
+	micro.Log("Starting server", part[1])
+	cmd[part[1]] = shell.JobSpawn(runCmd, args, onStdout(part[1]), onStderr, onExit(part[1]), {})
+	currentAction[part[1]] = {
+		method = "initialize",
+		response = function(bp, data)
+			send("initialized", "{}", true)
+			capabilities[filetype] = data.result and data.result.capabilities or {}
+			local b = targetBuf
+			if b == nil and bp ~= nil then
+				b = bp.Buf
+			end
+			if b ~= nil then
+				callback(b, filetype)
+			end
+		end,
+	}
+	send(
+		currentAction[part[1]].method,
+		fmt.Sprintf(
+			'{"processId": %.0f, "rootUri": "%s", "workspaceFolders": [{"name": "root", "uri": "%s"}], "initializationOptions": %s, "capabilities": {"textDocument": {"hover": {"contentFormat": ["plaintext", "markdown"]}, "publishDiagnostics": {"relatedInformation": false, "versionSupport": false, "codeDescriptionSupport": true, "dataSupport": true}, "signatureHelp": {"signatureInformation": {"documentationFormat": ["plaintext", "markdown"]}}}}}',
+			go_os.Getpid(),
+			rootUri,
+			rootUri,
+			initOptions
+		)
+	)
+end
+
+function startServer(filetype, callback, targetBuf)
+	local wd, _ = go_os.Getwd()
+	rootUri = fmt.Sprintf("file://%s", wd)
+	local settings = resolveServerSettings()
 	local server = parseOptions(settings)
 	micro.Log("Server Options", server)
-	for i in ipairs(server) do
-		local part = mysplit(server[i], "=")
-		local run = mysplit(part[2] or "", "%s")
-		local initOptions = config.GetGlobalOption("lsp." .. part[1]) or part[3] or "{}"
-		local runCmd = table.remove(run, 1)
-		local args = run
-		for idx, narg in ipairs(args) do
-			args[idx] = narg:gsub("%%[a-zA-Z0-9][a-zA-Z0-9]", function(entry)
-				return string.char(tonumber(entry:sub(2), 16))
-			end)
-		end
+	for _, entry in ipairs(server) do
+		local part = mysplit(entry, "=")
 		if filetype == part[1] then
-			local send = withSend(part[1])
-			if cmd[part[1]] ~= nil then
-				return
-			end
-			id[part[1]] = 0
-			micro.Log("Starting server", part[1])
-			cmd[part[1]] = shell.JobSpawn(runCmd, args, onStdout(part[1]), onStderr, onExit(part[1]), {})
-			currentAction[part[1]] = {
-				method = "initialize",
-				response = function(bp, data)
-					send("initialized", "{}", true)
-					capabilities[filetype] = data.result and data.result.capabilities or {}
-					local b = targetBuf
-					if b == nil and bp ~= nil then
-						b = bp.Buf
-					end
-					if b ~= nil then
-						callback(b, filetype)
-					end
-				end,
-			}
-			send(
-				currentAction[part[1]].method,
-				fmt.Sprintf(
-					'{"processId": %.0f, "rootUri": "%s", "workspaceFolders": [{"name": "root", "uri": "%s"}], "initializationOptions": %s, "capabilities": {"textDocument": {"hover": {"contentFormat": ["plaintext", "markdown"]}, "publishDiagnostics": {"relatedInformation": false, "versionSupport": false, "codeDescriptionSupport": true, "dataSupport": true}, "signatureHelp": {"signatureInformation": {"documentationFormat": ["plaintext", "markdown"]}}}}}',
-					go_os.Getpid(),
-					rootUri,
-					rootUri,
-					initOptions
-				)
-			)
+			launchServer(part, filetype, callback, targetBuf)
 			return
 		end
 	end

@@ -22,20 +22,7 @@ function preRune(bp, r)
 	end
 end
 
--- when a new character is types, the document changes
-function onRune(bp, r)
-	local filetype = bp.Buf:FileType()
-	micro.Log("FILETYPE", filetype)
-	if cmd[filetype] == nil then
-		return
-	end
-	if splitBP ~= nil then
-		pcall(function()
-			splitBP:Unsplit()
-		end)
-		splitBP = nil
-	end
-
+local function sendDocumentChange(bp, filetype, r)
 	local send = withSend(filetype)
 	local uri = getUriFromBuf(bp.Buf)
 	if r ~= nil then
@@ -60,24 +47,53 @@ function onRune(bp, r)
 		),
 		true
 	)
-	local ignored = mysplit(config.GetGlobalOption("lsp.ignoreTriggerCharacters") or "", ",")
-	if r and capabilities[filetype] then
-		if
-			not contains(ignored, "completion")
-			and capabilities[filetype].completionProvider
-			and capabilities[filetype].completionProvider.triggerCharacters
-			and contains(capabilities[filetype].completionProvider.triggerCharacters, r)
-		then
-			completionAction(bp)
-		elseif
-			not contains(ignored, "signature")
-			and capabilities[filetype].signatureHelpProvider
-			and capabilities[filetype].signatureHelpProvider.triggerCharacters
-			and contains(capabilities[filetype].signatureHelpProvider.triggerCharacters, r)
-		then
-			hoverAction(bp)
-		end
+end
+
+local function shouldTriggerCompletion(cap, ignored, r)
+	if contains(ignored, "completion") or not cap.completionProvider then
+		return false
 	end
+	local triggers = cap.completionProvider.triggerCharacters
+	return triggers and contains(triggers, r)
+end
+
+local function shouldTriggerHover(cap, ignored, r)
+	if contains(ignored, "signature") or not cap.signatureHelpProvider then
+		return false
+	end
+	local triggers = cap.signatureHelpProvider.triggerCharacters
+	return triggers and contains(triggers, r)
+end
+
+local function checkTriggerCharacters(bp, filetype, r)
+	if not (r and capabilities[filetype]) then
+		return
+	end
+	local ignored = mysplit(config.GetGlobalOption("lsp.ignoreTriggerCharacters") or "", ",")
+	local cap = capabilities[filetype]
+	if shouldTriggerCompletion(cap, ignored, r) then
+		completionAction(bp)
+	elseif shouldTriggerHover(cap, ignored, r) then
+		hoverAction(bp)
+	end
+end
+
+-- when a new character is types, the document changes
+function onRune(bp, r)
+	local filetype = bp.Buf:FileType()
+	micro.Log("FILETYPE", filetype)
+	if cmd[filetype] == nil then
+		return
+	end
+	if splitBP ~= nil then
+		pcall(function()
+			splitBP:Unsplit()
+		end)
+		splitBP = nil
+	end
+
+	sendDocumentChange(bp, filetype, r)
+	checkTriggerCharacters(bp, filetype, r)
 end
 
 function onBeforeTextEvent(bp, textEvent)
@@ -269,6 +285,106 @@ function onBufferOpen(buf)
 	end
 end
 
+local function handleWorkspaceConfig(filetype, data)
+	local res = fmt.Sprintf('{"jsonrpc": "2.0", "id": %.0f, "result": [{"enable": true}]}', data.id)
+	shell.JobSend(cmd[filetype], fmt.Sprintf("Content-Length: %.0f\n\n%s", #res, res))
+end
+
+local function applyDiagnosticMessage(bp, diagnostic)
+	local mtype = buffer.MTInfo
+	if diagnostic.severity == 1 then
+		mtype = buffer.MTError
+	elseif diagnostic.severity == 2 then
+		mtype = buffer.MTWarning
+	end
+	local mstart = buffer.Loc(diagnostic.range.start.character, diagnostic.range.start.line)
+	local mend = buffer.Loc(diagnostic.range["end"].character, diagnostic.range["end"].line)
+
+	if not isIgnoredMessage(diagnostic.message) then
+		local msg = buffer.NewMessage("lsp", diagnostic.message, mstart, mend, mtype)
+		bp:AddMessage(msg)
+	end
+end
+
+local function handlePublishDiagnostics(data)
+	local cur = micro.CurPane()
+	if cur == nil or cur.Buf == nil then
+		return
+	end
+	local bp = cur.Buf
+	bp:ClearMessages("lsp")
+	bp:AddMessage(buffer.NewMessage("lsp", "", buffer.Loc(0, 10000000), buffer.Loc(0, 10000000), buffer.MTInfo))
+	local uri = getUriFromBuf(bp)
+	if data.params.uri ~= uri then
+		return
+	end
+	for _, diagnostic in ipairs(data.params.diagnostics) do
+		applyDiagnosticMessage(bp, diagnostic)
+	end
+end
+
+local function handleWindowShowMessage(filetype, data)
+	if micro.CurPane() ~= nil and micro.CurPane().Buf ~= nil and filetype == micro.CurPane().Buf:FileType() then
+		micro.InfoBar():Message(data.params.message)
+	else
+		micro.Log(filetype .. " message " .. data.params.message)
+	end
+end
+
+local function handleCustomAction(filetype, data)
+	local bp = micro.CurPane()
+	micro.Log("Received message for ", filetype, data)
+	currentAction[filetype].response(bp, data)
+	currentAction[filetype] = {}
+end
+
+local function isPublishDiagnostics(method)
+	return method == "textDocument/publishDiagnostics" or method == "textDocument\\/publishDiagnostics"
+end
+
+local function isShowMessage(method)
+	return method == "window/showMessage" or method == "window\\/showMessage"
+end
+
+local function isLogMessage(method)
+	return method == "window/logMessage" or method == "window\\/logMessage"
+end
+
+local function isCustomAction(filetype, data)
+	local action = currentAction[filetype]
+	return action and action.method and not data.method and action.response and data.jsonrpc
+end
+
+local function handleLspMessage(filetype, data, rawMessage)
+	if data.method == "workspace/configuration" then
+		handleWorkspaceConfig(filetype, data)
+	elseif isPublishDiagnostics(data.method) then
+		handlePublishDiagnostics(data)
+	elseif isCustomAction(filetype, data) then
+		handleCustomAction(filetype, data)
+	elseif isShowMessage(data.method) then
+		handleWindowShowMessage(filetype, data)
+	elseif isLogMessage(data.method) then
+		micro.Log(data.params.message)
+	elseif rawMessage:starts("Content-Length:") then
+		if rawMessage:find('"') and not rawMessage:find('"result":null') then
+			micro.Log("Unhandled message 1", filetype, rawMessage, currentAction[filetype])
+		end
+	else
+		micro.Log("Unhandled message 2", filetype, rawMessage)
+	end
+end
+
+local function extractNextMessage(msg)
+	local cleanMsg = msg:gsub("}Content%-Length:", "}\0Content-Length:")
+	local entries = mysplit(cleanMsg, "\0")
+	if #entries > 1 then
+		micro.Log("Found break")
+		return entries[1], entries[2]
+	end
+	return cleanMsg, nil
+end
+
 function onStdout(filetype)
 	local nextMessage = ""
 	return function(text)
@@ -277,14 +393,10 @@ function onStdout(filetype)
 		else
 			message = message .. text
 		end
-		message = message:gsub("}Content%-Length:", "}\0Content-Length:")
-		local entries = mysplit(message, "\0")
-		if #entries > 1 then
-			micro.Log("Found break")
-			entries[1] = entries[1]
-			entries[2] = entries[2]
-			message = entries[1]
-			nextMessage = entries[2]
+		local currentMsg, nextMsg = extractNextMessage(message)
+		message = currentMsg
+		if nextMsg then
+			nextMessage = nextMsg
 		end
 		if not message:ends("}") then
 			micro.Log("Message incomplete, ignoring for now...")
@@ -297,68 +409,7 @@ function onStdout(filetype)
 		end
 
 		micro.Log(filetype .. " <<< " .. (data.method or "no method"))
-
-		if data.method == "workspace/configuration" then
-			-- actually needs to respond with the same ID as the received JSON
-			local message = fmt.Sprintf('{"jsonrpc": "2.0", "id": %.0f, "result": [{"enable": true}]}', data.id)
-			shell.JobSend(cmd[filetype], fmt.Sprintf("Content-Length: %.0f\n\n%s", #message, message))
-		elseif
-			data.method == "textDocument/publishDiagnostics" or data.method == "textDocument\\/publishDiagnostics"
-		then
-			-- react to server-published event
-			local cur = micro.CurPane()
-			if cur ~= nil and cur.Buf ~= nil then
-				local bp = cur.Buf
-				bp:ClearMessages("lsp")
-				bp:AddMessage(
-					buffer.NewMessage("lsp", "", buffer.Loc(0, 10000000), buffer.Loc(0, 10000000), buffer.MTInfo)
-				)
-				local uri = getUriFromBuf(bp)
-				if data.params.uri == uri then
-					for _, diagnostic in ipairs(data.params.diagnostics) do
-						local type = buffer.MTInfo
-						if diagnostic.severity == 1 then
-							type = buffer.MTError
-						elseif diagnostic.severity == 2 then
-							type = buffer.MTWarning
-						end
-						local mstart = buffer.Loc(diagnostic.range.start.character, diagnostic.range.start.line)
-						local mend = buffer.Loc(diagnostic.range["end"].character, diagnostic.range["end"].line)
-
-						if not isIgnoredMessage(diagnostic.message) then
-							msg = buffer.NewMessage("lsp", diagnostic.message, mstart, mend, type)
-							bp:AddMessage(msg)
-						end
-					end
-				end
-			end
-		elseif
-			currentAction[filetype]
-			and currentAction[filetype].method
-			and not data.method
-			and currentAction[filetype].response
-			and data.jsonrpc
-		then -- react to custom action event
-			local bp = micro.CurPane()
-			micro.Log("Received message for ", filetype, data)
-			currentAction[filetype].response(bp, data)
-			currentAction[filetype] = {}
-		elseif data.method == "window/showMessage" or data.method == "window\\/showMessage" then
-			if micro.CurPane() ~= nil and micro.CurPane().Buf ~= nil and filetype == micro.CurPane().Buf:FileType() then
-				micro.InfoBar():Message(data.params.message)
-			else
-				micro.Log(filetype .. " message " .. data.params.message)
-			end
-		elseif data.method == "window/logMessage" or data.method == "window\\/logMessage" then
-			micro.Log(data.params.message)
-		elseif message:starts("Content-Length:") then
-			if message:find('"') and not message:find('"result":null') then
-				micro.Log("Unhandled message 1", filetype, message, currentAction[filetype])
-			end
-		else
-			-- enable for debugging purposes
-			micro.Log("Unhandled message 2", filetype, message)
-		end
+		handleLspMessage(filetype, data, message)
 
 		if nextMessage then
 			local nm = nextMessage
