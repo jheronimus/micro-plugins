@@ -118,6 +118,33 @@ local function is_dotfile(file_name)
 	end
 end
 
+local function should_show_file(filename, show_dotfiles, show_ignored, is_ignored_fn)
+	if not show_dotfiles and is_dotfile(filename) then
+		return false
+	end
+	if not show_ignored and is_ignored_fn(filename) then
+		return false
+	end
+	return true
+end
+
+local function build_ignored_checker(dir, show_ignored)
+	if show_ignored then
+		return function(_)
+			return false
+		end
+	end
+	local ignored_files = get_ignored_files(dir)
+	return function(filename)
+		for i = 1, #ignored_files do
+			if ignored_files[i] == filename then
+				return true
+			end
+		end
+		return false
+	end
+end
+
 -- Structures the output of the scanned directory content to be used in the scanlist table
 -- This is useful for both initial creation of the tree, and when nesting with uncompress_target()
 local function get_scanlist(dir, ownership, indent_n)
@@ -146,35 +173,11 @@ local function get_scanlist(dir, ownership, indent_n)
 	local show_dotfiles = config.GetGlobalOption("filemanager.showdotfiles")
 	local show_ignored = config.GetGlobalOption("filemanager.showignored")
 	local folders_first = config.GetGlobalOption("filemanager.foldersfirst")
-
-	-- The list of VCS-ignored files (if any)
-	-- Only bother getting ignored files if we're not showing ignored
-	local ignored_files = (not show_ignored and get_ignored_files(dir) or {})
-	-- True/false if the file is an ignored file
-	local function is_ignored_file(filename)
-		for i = 1, #ignored_files do
-			if ignored_files[i] == filename then
-				return true
-			end
-		end
-		return false
-	end
-
-	-- Hold the current scan's filename in most of the loops below
-	local filename
+	local is_ignored_file = build_ignored_checker(dir, show_ignored)
 
 	for i = 1, #dir_scan do
-		local showfile = true
-		filename = dir_scan[i]:Name()
-		-- If we should not show dotfiles, and this is a dotfile, don't show
-		if not show_dotfiles and is_dotfile(filename) then
-			showfile = false
-		end
-		-- If we should not show ignored files, and this is an ignored file, don't show
-		if not show_ignored and is_ignored_file(filename) then
-			showfile = false
-		end
-		if showfile then
+		local filename = dir_scan[i]:Name()
+		if should_show_file(filename, show_dotfiles, show_ignored, is_ignored_file) then
 			-- This file is good to show, proceed
 			if folders_first and not is_dir(filepath.Join(dir, filename)) then
 				-- If folders_first and this is a file, add it to (temporary) files
@@ -332,104 +335,79 @@ local function refresh_and_select()
 	select_line(last_y)
 end
 
+local function should_delete_item(item, index, delete_under)
+	for x = 1, #delete_under do
+		if item.owner == delete_under[x] then
+			if item.dirmsg == "-" then
+				delete_under[#delete_under + 1] = index
+			end
+			if item.indent == highest_visible_indent and item.indent > 0 then
+				highest_visible_indent = highest_visible_indent - 1
+			end
+			return true
+		end
+	end
+	return false
+end
+
+local function remove_nested_children(y)
+	local delete_under = { [1] = y }
+	local new_table = {}
+	local del_count = 0
+	for i = 1, #scanlist do
+		if i ~= y and should_delete_item(scanlist[i], i, delete_under) then
+			del_count = del_count + 1
+		else
+			new_table[#new_table + 1] = scanlist[i]
+		end
+	end
+	scanlist = new_table
+	if del_count > 0 then
+		for i = y + 1, #scanlist do
+			if scanlist[i].owner > y then
+				scanlist[i]:decrease_owner(del_count)
+			end
+		end
+	end
+end
+
+local function remove_target_item(y)
+	local second_table = {}
+	for i = 1, #scanlist do
+		if i == y then
+			for x = i + 1, #scanlist do
+				if scanlist[x].owner > y then
+					scanlist[x]:decrease_owner(1)
+				end
+			end
+		else
+			second_table[#second_table + 1] = scanlist[i]
+		end
+	end
+	scanlist = second_table
+end
+
 -- Find everything nested under the target, and remove it from the scanlist
 local function compress_target(y, delete_y)
-	-- Can't compress the top stuff, or if there's nothing there, so exit early
 	if y == 0 or scanlist_is_empty() then
 		return
 	end
-	-- Check if the target is a dir, since files don't have anything to compress
-	-- Also make sure it's actually an uncompressed dir by checking the gutter message
+
 	if scanlist[y].dirmsg == "-" then
-		local target_index, delete_index
-		-- Add the original target y to stuff to delete
-		local delete_under = { [1] = y }
-		local new_table = {}
-		local del_count = 0
-		-- Loop through the whole table, looking for nested content, or stuff with ownership == y...
-		-- and delete matches. y+1 because we want to start under y, without actually touching y itself.
-		for i = 1, #scanlist do
-			delete_index = false
-			-- Don't run on y, since we don't always delete y
-			if i ~= y then
-				-- On each loop, check if the ownership matches
-				for x = 1, #delete_under do
-					-- Check for something belonging to a thing to delete
-					if scanlist[i].owner == delete_under[x] then
-						-- Delete the target if it has an ownership to our delete target
-						delete_index = true
-						-- Keep count of total deleted (can't use #delete_under because it's for deleted dir count)
-						del_count = del_count + 1
-						-- Check if an uncompressed dir
-						if scanlist[i].dirmsg == "-" then
-							-- Add the index to stuff to delete, since it holds nested content
-							delete_under[#delete_under + 1] = i
-						end
-						-- See if we're on the "deepest" nested content
-						if scanlist[i].indent == highest_visible_indent and scanlist[i].indent > 0 then
-							-- Save the lower indent, since we're minimizing/deleting nested dirs
-							highest_visible_indent = highest_visible_indent - 1
-						end
-						-- Nothing else to do, so break this inner loop
-						break
-					end
-				end
-			end
-			if not delete_index then
-				-- Save the index in our new table
-				new_table[#new_table + 1] = scanlist[i]
-			end
-		end
-
-		scanlist = new_table
-
-		if del_count > 0 then
-			-- Ownership adjusting since we're deleting an index
-			for i = y + 1, #scanlist do
-				-- Don't touch root file/dirs
-				if scanlist[i].owner > y then
-					-- Minus ownership, on everything below i, the number deleted
-					scanlist[i]:decrease_owner(del_count)
-				end
-			end
-		end
-
-		-- If not deleting, then update the gutter message to be + to signify compressed
+		remove_nested_children(y)
 		if not delete_y then
-			-- Update the dir message
 			scanlist[y].dirmsg = "+"
 		end
 	elseif config.GetGlobalOption("filemanager.compressparent") and not delete_y then
 		goto_parent_dir()
-		-- Prevent a pointless refresh of the view
 		return
 	end
 
-	-- Put outside check above because we call this to delete targets as well
 	if delete_y then
-		local second_table = {}
-		-- Quickly remove y
-		for i = 1, #scanlist do
-			if i == y then
-				-- Reduce everything's ownership by 1 after y
-				for x = i + 1, #scanlist do
-					-- Don't touch root file/dirs
-					if scanlist[x].owner > y then
-						-- Minus 1 since we're just deleting y
-						scanlist[x]:decrease_owner(1)
-					end
-				end
-			else
-				-- Put everything but y into the temporary table
-				second_table[#second_table + 1] = scanlist[i]
-			end
-		end
-		-- Put everything (but y) back into scanlist, with adjusted ownership values
-		scanlist = second_table
+		remove_target_item(y)
 	end
 
 	if tree_view:GetView().Width > (30 + highest_visible_indent) then
-		-- Shave off some width
 		tree_view:ResizePane(30 + highest_visible_indent)
 	end
 
@@ -543,63 +521,50 @@ local function try_open_at_y(y)
 	end
 end
 
+local function insert_scan_results(y, scan_results)
+	local new_table = {}
+	for i = 1, #scanlist do
+		new_table[#new_table + 1] = scanlist[i]
+		if i == y then
+			for x = 1, #scan_results do
+				new_table[#new_table + 1] = scan_results[x]
+			end
+			for inner_i = y + 1, #scanlist do
+				if scanlist[inner_i].owner > y then
+					scanlist[inner_i]:increase_owner(#scan_results)
+				end
+			end
+		end
+	end
+	scanlist = new_table
+end
+
+local function check_resize_pane_for_uncompress(y, scan_results)
+	if scan_results ~= nil and #scan_results >= 1 then
+		if scanlist[y].indent > highest_visible_indent then
+			highest_visible_indent = scanlist[y].indent
+			tree_view:ResizePane(tree_view:GetView().Width + scanlist[y].indent)
+		end
+	end
+end
+
 -- Opens the dir's contents nested under itself
 local function uncompress_target(y)
-	-- Exit early if on the top 3 non-list items
 	if y == 0 or scanlist_is_empty() then
 		return
 	end
-	-- Only uncompress if it's a dir and it's not already uncompressed
-	if scanlist[y].dirmsg == "+" then
-		-- Get a new scanlist with results from the scan in the target dir
-		local scan_results = get_scanlist(scanlist[y].abspath, y, scanlist[y].indent + 1)
-		-- Don't run any of this if there's nothing in the dir we scanned, pointless
-		if scan_results ~= nil then
-			-- Will hold all the old values + new scan results
-			local new_table = {}
-			-- By not inserting in-place, some unexpected results can be avoided
-			-- Also, table.insert actually moves values up (???) instead of down
-			for i = 1, #scanlist do
-				-- Put the current val into our new table
-				new_table[#new_table + 1] = scanlist[i]
-				if i == y then
-					-- Fill in the scan results under y
-					for x = 1, #scan_results do
-						new_table[#new_table + 1] = scan_results[x]
-					end
-					-- Basically "moving down" everything below y, so ownership needs to increase on everything
-					for inner_i = y + 1, #scanlist do
-						-- When root not pushed by inserting, don't change its ownership
-						-- This also has a dual-purpose to make it not effect root file/dirs
-						-- since y is always >= 3
-						if scanlist[inner_i].owner > y then
-							-- Increase each indicies ownership by the number of scan results inserted
-							scanlist[inner_i]:increase_owner(#scan_results)
-						end
-					end
-				end
-			end
-
-			-- Update our scanlist with the new values
-			scanlist = new_table
-		end
-
-		-- Change to minus to signify it's uncompressed
-		scanlist[y].dirmsg = "-"
-
-		-- Check if we actually need to resize, or if we're nesting at the same indent
-		-- Also check if there's anything in the dir, as we don't need to expand on an empty dir
-		if scan_results ~= nil then
-			if scanlist[y].indent > highest_visible_indent and #scan_results >= 1 then
-				-- Save the new highest indent
-				highest_visible_indent = scanlist[y].indent
-				-- Increase the width to fit the new nested content
-				tree_view:ResizePane(tree_view:GetView().Width + scanlist[y].indent)
-			end
-		end
-
-		refresh_and_select()
+	if scanlist[y].dirmsg ~= "+" then
+		return
 	end
+
+	local scan_results = get_scanlist(scanlist[y].abspath, y, scanlist[y].indent + 1)
+	if scan_results ~= nil then
+		insert_scan_results(y, scan_results)
+	end
+
+	scanlist[y].dirmsg = "-"
+	check_resize_pane_for_uncompress(y, scan_results)
+	refresh_and_select()
 end
 
 -- Stat a path to check if it exists, returning true/false
@@ -670,6 +635,56 @@ function rename_at_cursor(bp, args)
 	refresh_and_select()
 end
 
+local function resolve_create_path(filedir_name, y, scanlist_empty)
+	if not scanlist_empty and y ~= 0 then
+		if scanlist[y].dirmsg ~= "" then
+			return filepath.Join(scanlist[y].abspath, filedir_name)
+		end
+		return dirname_and_join(scanlist[y].abspath, filedir_name)
+	end
+	return filepath.Join(current_dir, filedir_name)
+end
+
+local function perform_filedir_creation(filedir_path, make_dir)
+	local golib_os = import("os")
+	if make_dir then
+		golib_os.Mkdir(filedir_path, golib_os.ModePerm)
+		micro.Log("Filemanager created directory: " .. filedir_path)
+	else
+		golib_os.Create(filedir_path)
+		micro.Log("Filemanager created file: " .. filedir_path)
+	end
+end
+
+local function configure_new_filedir_hierarchy(new_filedir, y)
+	if scanlist[y].dirmsg == "+" then
+		return false
+	elseif scanlist[y].dirmsg == "-" then
+		new_filedir.owner = y
+		new_filedir.indent = scanlist[y].indent + 1
+	else
+		new_filedir.owner = scanlist[y].owner
+		new_filedir.indent = scanlist[y].indent
+	end
+	return true
+end
+
+local function insert_filedir_into_scanlist(new_filedir, y)
+	local new_table = {}
+	for i = 1, #scanlist do
+		new_table[#new_table + 1] = scanlist[i]
+		if i == y then
+			new_table[#new_table + 1] = new_filedir
+			for inner_i = y + 1, #scanlist do
+				if scanlist[inner_i].owner > y then
+					scanlist[inner_i]:increase_owner(1)
+				end
+			end
+		end
+	end
+	scanlist = new_table
+end
+
 -- Prompts the user for the file/dir name, then creates the file/dir using Go's os package
 local function create_filedir(filedir_name, make_dir)
 	if micro.CurPane() ~= tree_view then
@@ -677,120 +692,38 @@ local function create_filedir(filedir_name, make_dir)
 		return
 	end
 
-	-- Safety check they passed a name
 	if filedir_name == nil then
 		micro.InfoBar():Error('You need to input a name when using "touch" or "mkdir"!')
 		return
 	end
 
-	-- The target they're trying to create on top of/in/at/whatever
 	local y = get_safe_y()
-	-- Holds the path passed to Go for the eventual new file/dir
-	local filedir_path
-	-- A true/false if scanlist is empty
 	local scanlist_empty = scanlist_is_empty()
+	local filedir_path = resolve_create_path(filedir_name, y, scanlist_empty)
 
-	-- Check there's actually anything in the list, and that they're not on the ".."
-	if not scanlist_empty and y ~= 0 then
-		-- If they're inserting on a folder, don't strip its path
-		if scanlist[y].dirmsg ~= "" then
-			-- Join our new file/dir onto the dir
-			filedir_path = filepath.Join(scanlist[y].abspath, filedir_name)
-		else
-			-- The current index is a file, so strip its name and join ours onto it
-			filedir_path = dirname_and_join(scanlist[y].abspath, filedir_name)
-		end
-	else
-		-- if nothing in the list, or cursor is on top of "..", use the current dir
-		filedir_path = filepath.Join(current_dir, filedir_name)
-	end
-
-	-- Check if the name is already taken by a file/dir
 	if path_exists(filedir_path) then
 		micro.InfoBar():Error("You can't create a file/dir with a pre-existing name")
 		return
 	end
 
-	-- Use Go's os package for creating the files
-	local golib_os = import("os")
-	-- Create the dir or file
-	if make_dir then
-		-- Creates the dir
-		golib_os.Mkdir(filedir_path, golib_os.ModePerm)
-		micro.Log("Filemanager created directory: " .. filedir_path)
-	else
-		-- Creates the file
-		golib_os.Create(filedir_path)
-		micro.Log("Filemanager created file: " .. filedir_path)
-	end
+	perform_filedir_creation(filedir_path, make_dir)
 
-	-- If the file we tried to make doesn't exist, fail
 	if not path_exists(filedir_path) then
 		micro.InfoBar():Error("The file/dir creation failed")
-
 		return
 	end
 
-	-- Creates a sort of default object, to be modified below
-	-- If creating a dir, use a "+"
 	local new_filedir = new_listobj(filedir_path, (make_dir and "+" or ""), 0, 0)
-
-	-- Refresh with our new value(s)
 	local last_y
 
-	-- Only insert to scanlist if not created into a compressed dir, since it'd be hidden if it was
-	-- Wrap the below checks so a y=0 doesn't break something
 	if not scanlist_empty and y ~= 0 then
-		-- +1 so it's highlighting the new file/dir
 		last_y = tree_view.Cursor.Loc.Y + 1
-
-		-- Only actually add the object to the list if it's not created on an uncompressed folder
-		if scanlist[y].dirmsg == "+" then
-			-- Exit early, since it was created into an uncompressed folder
-
+		if not configure_new_filedir_hierarchy(new_filedir, y) then
 			return
-		elseif scanlist[y].dirmsg == "-" then
-			-- Check if created on top of an uncompressed folder
-			-- Change ownership to the folder it was created on top of..
-			-- otherwise, the ownership would be incorrect
-			new_filedir.owner = y
-			-- We insert under the folder, so increment the indent
-			new_filedir.indent = scanlist[y].indent + 1
-		else
-			-- This triggers if the cursor is on top of a file...
-			-- so we copy the properties of it
-			new_filedir.owner = scanlist[y].owner
-			new_filedir.indent = scanlist[y].indent
 		end
-
-		-- A temporary table for adding our new object, and manipulation
-		local new_table = {}
-		-- Insert the new file/dir, and update ownership of everything below it
-		for i = 1, #scanlist do
-			-- Don't use i as index, as it will be off by one on the next pass after below "i == y"
-			new_table[#new_table + 1] = scanlist[i]
-			if i == y then
-				-- Insert our new file/dir (below the last item)
-				new_table[#new_table + 1] = new_filedir
-				-- Increase ownership of everything below it, since we're inserting
-				-- Basically "moving down" everything below y, so ownership needs to increase on everything
-				for inner_i = y + 1, #scanlist do
-					-- When root not pushed by inserting, don't change its ownership
-					-- This also has a dual-purpose to make it not effect root file/dirs
-					-- since y is always >= 3
-					if scanlist[inner_i].owner > y then
-						-- Increase each indicies ownership by 1 since we're only inserting 1 file/dir
-						scanlist[inner_i]:increase_owner(1)
-					end
-				end
-			end
-		end
-		-- Update the scanlist with the new object & updated ownerships
-		scanlist = new_table
+		insert_filedir_into_scanlist(new_filedir, y)
 	else
-		-- The scanlist is empty (or cursor is on ".."), so we add on our new file/dir at the bottom
 		scanlist[#scanlist + 1] = new_filedir
-		-- Add current position so it takes into account where we are
 		last_y = #scanlist + tree_view.Cursor.Loc.Y
 	end
 
