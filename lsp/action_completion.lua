@@ -46,12 +46,20 @@ function completionAction(bp)
 	end
 	if completionCursor == 0 then
 		doAutoCompletion = nil
-		if cmd[filetype] == nil then return; end
+		if cmd[filetype] == nil then
+			return
+		end
 		lastCompletion = { file, line, char }
 		currentAction[filetype] = { method = "textDocument/completion", response = completionActionResponse }
-		send(currentAction[filetype].method,
-			fmt.Sprintf('{"textDocument": {"uri": "file://%s"}, "position": {"line": %.0f, "character": %.0f}}', file,
-				line, char))
+		send(
+			currentAction[filetype].method,
+			fmt.Sprintf(
+				'{"textDocument": {"uri": "file://%s"}, "position": {"line": %.0f, "character": %.0f}}',
+				file,
+				line,
+				char
+			)
+		)
 	elseif doAutoCompletion then
 		doAutoCompletion()
 	end
@@ -125,7 +133,11 @@ function completionActionResponse(bp, data)
 		-- if we have no defined ranges in the result
 		-- try to find out what our prefix is we want to filter against
 		if not results[1] or not results[1].textEdit or not results[1].textEdit.range then
-			if capabilities[bp.Buf:FileType()] and capabilities[bp.Buf:FileType()].completionProvider and capabilities[bp.Buf:FileType()].completionProvider.triggerCharacters then
+			if
+				capabilities[bp.Buf:FileType()]
+				and capabilities[bp.Buf:FileType()].completionProvider
+				and capabilities[bp.Buf:FileType()].completionProvider.triggerCharacters
+			then
 				local cur = bp.Buf:GetActiveCursor()
 				cur:SelectLine()
 				local lineContent = util.String(cur:GetSelection())
@@ -146,7 +158,7 @@ function completionActionResponse(bp, data)
 					end
 				end
 				if not found then
-					prefix = lineContent:gsub("\r?\n$", '')
+					prefix = lineContent:gsub("\r?\n$", "")
 				end
 			end
 			-- if we have found a prefix
@@ -163,7 +175,11 @@ function completionActionResponse(bp, data)
 				bp.Cursor:SetSelectionEnd(xy)
 				bp.Cursor:DeleteSelection()
 				bp.Cursor:ResetSelection()
-			elseif capabilities[bp.Buf:FileType()] and capabilities[bp.Buf:FileType()].completionProvider and capabilities[bp.Buf:FileType()].completionProvider.triggerCharacters then
+			elseif
+				capabilities[bp.Buf:FileType()]
+				and capabilities[bp.Buf:FileType()].completionProvider
+				and capabilities[bp.Buf:FileType()].completionProvider.triggerCharacters
+			then
 				if not found then
 					-- we found nothing - so assume we need the beginning of the line
 					if reversed:starts(" ") or reversed:starts("\t") then
@@ -193,11 +209,14 @@ function completionActionResponse(bp, data)
 		bp.Cursor:SetSelectionStart(start)
 		bp.Cursor:SetSelectionEnd(xy)
 
-		local msg = ''
-		local insertion = ''
+		local msg = ""
+		local insertion = ""
 		if entry and (entry.detail or entry.documentation) then
-			msg = fmt.Sprintf("%s\n\n%s", entry.detail or '',
-				entry.documentation and entry.documentation.value or entry.documentation or '')
+			msg = fmt.Sprintf(
+				"%s\n\n%s",
+				entry.detail or "",
+				entry.documentation and entry.documentation.value or entry.documentation or ""
+			)
 		end
 		if config.GetGlobalOption("lsp.autocompleteDetails") then
 			if entry and (entry.detail or entry.documentation) then
@@ -215,8 +234,9 @@ function completionActionResponse(bp, data)
 			end
 		else
 			if entry and (entry.detail or entry.documentation) then
-				micro.InfoBar():Message(entry.detail or
-					(entry.documentation and entry.documentation.value or entry.documentation or ''))
+				micro.InfoBar():Message(
+					entry.detail or (entry.documentation and entry.documentation.value or entry.documentation or "")
+				)
 			end
 		end --]]
 	end

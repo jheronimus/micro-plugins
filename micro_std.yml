@@ -1,0 +1,68 @@
+base: lua51
+globals:
+  import:
+    any: true
+  VERSION:
+    any: true
+  cmd:
+    any: true
+  currentAction:
+    any: true
+  capabilities:
+    any: true
+  rootUri:
+    any: true
+  defineActions:
+    any: true
+  withSend:
+    any: true
+  startServer:
+    any: true
+  handleInitialized:
+    any: true
+  isIgnoredMessage:
+    any: true
+  mysplit:
+    any: true
+  getUriFromBuf:
+    any: true
+  contains:
+    any: true
+  formatAction:
+    any: true
+  hoverAction:
+    any: true
+  completionAction:
+    any: true
+  definitionAction:
+    any: true
+  referencesAction:
+    any: true
+  onStdout:
+    any: true
+  onStderr:
+    any: true
+  onExit:
+    any: true
+  onRune:
+    any: true
+  rangeStart:
+    any: true
+  rangeEnd:
+    any: true
+  buf:
+    any: true
+  msg:
+    any: true
+  splitBP:
+    any: true
+  lastCompletion:
+    any: true
+  completionCursor:
+    any: true
+  tabCount:
+    any: true
+  found:
+    any: true
+  json:
+    any: true

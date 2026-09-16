@@ -1,0 +1,9 @@
+std = "micro_std"
+
+[lints]
+incorrect_standard_library_use = "allow"
+unscoped_variables = "allow"
+shadowing = "allow"
+unused_variable = "allow"
+multiple_statements = "allow"
+empty_if = "allow"

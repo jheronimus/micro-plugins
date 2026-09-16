@@ -1,0 +1,10 @@
+[tools]
+stylua = "latest"
+"aqua:Kampfkarren/selene" = "latest"
+
+[tasks.validate]
+description = "Validate Lua code with StyLua and Selene"
+run = """
+stylua --check .
+selene .
+"""

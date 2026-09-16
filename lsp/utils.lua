@@ -12,7 +12,9 @@ function toBytes(str)
 end
 
 function getUriFromBuf(buf)
-	if buf == nil then return; end
+	if buf == nil then
+		return
+	end
 	local file = buf.AbsPath
 	local uri = fmt.Sprintf("file://%s", file)
 	return uri
@@ -30,17 +32,18 @@ function mysplit(inputstr, sep)
 end
 
 function table.join(tbl, sep)
-	local result = ''
+	local result = ""
 	for _, value in ipairs(tbl) do
-		result = result .. (#result > 0 and sep or '') .. value
+		result = result .. (#result > 0 and sep or "") .. value
 	end
 	return result
 end
 
-
 function contains(list, x)
 	for _, v in pairs(list) do
-		if v == x then return true; end
+		if v == x then
+			return true
+		end
 	end
 	return false
 end
@@ -54,10 +57,10 @@ function string.ends(String, End)
 end
 
 function string.random(CharSet, Length, prefix)
-	local _CharSet = CharSet or '.'
+	local _CharSet = CharSet or "."
 
-	if _CharSet == '' then
-		return ''
+	if _CharSet == "" then
+		return ""
 	else
 		local Result = prefix or ""
 		math.randomseed(os.time())
@@ -71,7 +74,9 @@ function string.random(CharSet, Length, prefix)
 end
 
 function string.parse(text)
-	if not text:find('"jsonrpc":') then return {}; end
+	if not text:find('"jsonrpc":') then
+		return {}
+	end
 	local start, fin = text:find("\n%s*\n")
 	local cleanedText = text
 	if fin ~= nil then
@@ -88,11 +93,12 @@ table.filter = function(t, filterIter)
 	local out = {}
 
 	for k, v in pairs(t) do
-		if filterIter(v, k, t) then table.insert(out, v) end
+		if filterIter(v, k, t) then
+			table.insert(out, v)
+		end
 	end
 
 	return out
 end
 
 table.unpack = table.unpack or unpack
-

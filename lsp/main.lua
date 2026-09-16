@@ -13,11 +13,11 @@ local filepath = import("path/filepath")
 cmd = {}
 currentAction = {}
 capabilities = {}
-rootUri = ''
+rootUri = ""
 
 local id = {}
-local filetype = ''
-local message = ''
+local filetype = ""
+local message = ""
 local splitBP = nil
 local tabCount = 0
 
@@ -25,14 +25,17 @@ local json = json
 
 function init()
 	-- register all configuration options
-	config.RegisterCommonOption("lsp", "server",
-		'python=pylsp,go=gopls,typescript=deno lsp={"enable":true},javascript=deno lsp={"enable":true},markdown=deno lsp={"enable":true},json=deno lsp={"enable":true},jsonc=deno lsp={"enable":true},rust=rust-analyzer,lua=lua-language-server,c++=clangd,dart=dart language-server')
+	config.RegisterCommonOption(
+		"lsp",
+		"server",
+		'python=pylsp,go=gopls,typescript=deno lsp={"enable":true},javascript=deno lsp={"enable":true},markdown=deno lsp={"enable":true},json=deno lsp={"enable":true},jsonc=deno lsp={"enable":true},rust=rust-analyzer,lua=lua-language-server,c++=clangd,dart=dart language-server'
+	)
 	config.RegisterCommonOption("lsp", "formatOnSave", false)
 	config.RegisterCommonOption("lsp", "autocompleteDetails", false)
 	config.RegisterCommonOption("lsp", "ignoreMessages", "")
 	config.RegisterCommonOption("lsp", "tabcompletion", true)
 	config.RegisterCommonOption("lsp", "ignoreTriggerCharacters", "completion")
-		
+
 	-- example to ignore all LSP server message starting with these strings:
 	-- "lsp.ignoreMessages": "Skipping analyzing |See https://"
 
@@ -44,7 +47,7 @@ function init()
 end
 
 function parseOptions(inputstr)
-	return mysplit(inputstr, ',')
+	return mysplit(inputstr, ",")
 end
 
 function startServer(filetype, callback, targetBuf)
@@ -53,7 +56,7 @@ function startServer(filetype, callback, targetBuf)
 	local envSettings, _ = go_os.Getenv("MICRO_LSP")
 	local settings = config.GetGlobalOption("lsp.server")
 	local fallback =
-	'python=pylsp,go=gopls,typescript=deno lsp={"enable":true},javascript=deno lsp={"enable":true},markdown=deno lsp={"enable":true},json=deno lsp={"enable":true},jsonc=deno lsp={"enable":true},rust=rust-analyzer,lua=lua-language-server,c++=clangd,dart=dart language-server'
+		'python=pylsp,go=gopls,typescript=deno lsp={"enable":true},javascript=deno lsp={"enable":true},markdown=deno lsp={"enable":true},json=deno lsp={"enable":true},jsonc=deno lsp={"enable":true},rust=rust-analyzer,lua=lua-language-server,c++=clangd,dart=dart language-server'
 	if envSettings ~= nil and #envSettings > 0 then
 		settings = envSettings
 	end
@@ -66,8 +69,8 @@ function startServer(filetype, callback, targetBuf)
 	micro.Log("Server Options", server)
 	for i in ipairs(server) do
 		local part = mysplit(server[i], "=")
-		local run = mysplit(part[2] or '', "%s")
-		local initOptions = config.GetGlobalOption('lsp.' .. part[1]) or part[3] or '{}'
+		local run = mysplit(part[2] or "", "%s")
+		local initOptions = config.GetGlobalOption("lsp." .. part[1]) or part[3] or "{}"
 		local runCmd = table.remove(run, 1)
 		local args = run
 		for idx, narg in ipairs(args) do
@@ -77,7 +80,9 @@ function startServer(filetype, callback, targetBuf)
 		end
 		if filetype == part[1] then
 			local send = withSend(part[1])
-			if cmd[part[1]] ~= nil then return; end
+			if cmd[part[1]] ~= nil then
+				return
+			end
 			id[part[1]] = 0
 			micro.Log("Starting server", part[1])
 			cmd[part[1]] = shell.JobSpawn(runCmd, args, onStdout(part[1]), onStderr, onExit(part[1]), {})
@@ -93,12 +98,18 @@ function startServer(filetype, callback, targetBuf)
 					if b ~= nil then
 						callback(b, filetype)
 					end
-				end
+				end,
 			}
-			send(currentAction[part[1]].method,
+			send(
+				currentAction[part[1]].method,
 				fmt.Sprintf(
 					'{"processId": %.0f, "rootUri": "%s", "workspaceFolders": [{"name": "root", "uri": "%s"}], "initializationOptions": %s, "capabilities": {"textDocument": {"hover": {"contentFormat": ["plaintext", "markdown"]}, "publishDiagnostics": {"relatedInformation": false, "versionSupport": false, "codeDescriptionSupport": true, "dataSupport": true}, "signatureHelp": {"signatureInformation": {"documentationFormat": ["plaintext", "markdown"]}}}}}',
-					go_os.Getpid(), rootUri, rootUri, initOptions))
+					go_os.Getpid(),
+					rootUri,
+					rootUri,
+					initOptions
+				)
+			)
 			return
 		end
 	end
@@ -111,8 +122,12 @@ function withSend(filetype)
 		end
 
 		micro.Log(filetype .. ">>> " .. method)
-		local msg = fmt.Sprintf('{"jsonrpc": "2.0", %s"method": "%s", "params": %s}',
-			not isNotification and fmt.Sprintf('"id": %.0f, ', id[filetype]) or "", method, params)
+		local msg = fmt.Sprintf(
+			'{"jsonrpc": "2.0", %s"method": "%s", "params": %s}',
+			not isNotification and fmt.Sprintf('"id": %.0f, ', id[filetype]) or "",
+			method,
+			params
+		)
 		id[filetype] = id[filetype] + 1
 		msg = fmt.Sprintf("Content-Length: %.0f\r\n\r\n%s", #msg, msg)
 		micro.Log(msg)
@@ -121,15 +136,28 @@ function withSend(filetype)
 end
 
 function handleInitialized(buf, filetype)
-	if cmd[filetype] == nil then return; end
+	if cmd[filetype] == nil then
+		return
+	end
 	micro.Log("Found running lsp server for ", filetype, "firing textDocument/didOpen...")
 	local send = withSend(filetype)
 	local uri = getUriFromBuf(buf)
-	local content = util.String(buf:Bytes()):gsub("\\", "\\\\"):gsub("\n", "\\n"):gsub("\r", "\\r"):gsub('"', '\\"')
+	local content = util.String(buf:Bytes())
+		:gsub("\\", "\\\\")
+		:gsub("\n", "\\n")
+		:gsub("\r", "\\r")
+		:gsub('"', '\\"')
 		:gsub("\t", "\\t")
-	send("textDocument/didOpen",
-		fmt.Sprintf('{"textDocument": {"uri": "%s", "languageId": "%s", "version": 1, "text": "%s"}}', uri, filetype,
-			content), true)
+	send(
+		"textDocument/didOpen",
+		fmt.Sprintf(
+			'{"textDocument": {"uri": "%s", "languageId": "%s", "version": 1, "text": "%s"}}',
+			uri,
+			filetype,
+			content
+		),
+		true
+	)
 end
 
 function isIgnoredMessage(msg)
@@ -139,7 +167,7 @@ function isIgnoredMessage(msg)
 	for _, ignore in pairs(ignoreList) do
 		if string.match(msg, ignore) then -- match from start of string
 			micro.Log("Ignore message: '", msg, "', because it matched: '", ignore, "'.")
-			return true             -- ignore this message, dont show to user
+			return true -- ignore this message, dont show to user
 		end
 	end
 	return false -- show this message to user

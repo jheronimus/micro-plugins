@@ -1,38 +1,50 @@
 local micro = import("micro")
-local buffer = import('micro/buffer')
-local fmt = import('fmt')
-local go_os = import('os')
+local buffer = import("micro/buffer")
+local fmt = import("fmt")
+local go_os = import("os")
 
 -- the definition action request and response
 function definitionAction(bp)
 	local filetype = bp.Buf:FileType()
-	micro.Log('Filetype', filetype, cmd[filetype])
-	if cmd[filetype] == nil then return; end
+	micro.Log("Filetype", filetype, cmd[filetype])
+	if cmd[filetype] == nil then
+		return
+	end
 
 	local send = withSend(filetype)
 	local file = bp.Buf.AbsPath
 	local line = bp.Buf:GetActiveCursor().Y
 	local char = bp.Buf:GetActiveCursor().X
 	currentAction[filetype] = { method = "textDocument/definition", response = definitionActionResponse }
-	send(currentAction[filetype].method,
-		fmt.Sprintf('{"textDocument": {"uri": "file://%s"}, "position": {"line": %.0f, "character": %.0f}}', file, line,
-			char))
+	send(
+		currentAction[filetype].method,
+		fmt.Sprintf(
+			'{"textDocument": {"uri": "file://%s"}, "position": {"line": %.0f, "character": %.0f}}',
+			file,
+			line,
+			char
+		)
+	)
 end
 
 function definitionActionResponse(bp, data)
 	local results = data.result or data.partialResult
-	if results == nil then return; end
+	if results == nil then
+		return
+	end
 	local file = bp.Buf.AbsPath
 	if results.uri ~= nil then
 		-- single result
 		results = { results }
 	end
-	if #results <= 0 then return; end
+	if #results <= 0 then
+		return
+	end
 	local uri = (results[1].uri or results[1].targetUri)
-	local doc = uri:gsub("^file://", ""):gsub('%%[a-f0-9][a-f0-9]',
-		function(x, y, z)
-			print("X", x); return string.char(tonumber(x:gsub('%%', ''), 16))
-		end)
+	local doc = uri:gsub("^file://", ""):gsub("%%[a-f0-9][a-f0-9]", function(x, y, z)
+		print("X", x)
+		return string.char(tonumber(x:gsub("%%", ""), 16))
+	end)
 	local buf = bp.Buf
 	if file ~= doc then
 		-- it's from a different file, so open it as a new tab

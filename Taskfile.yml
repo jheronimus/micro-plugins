@@ -1,0 +1,13 @@
+version: '3'
+
+tasks:
+  validate:
+    desc: Validate Lua code with StyLua and Selene
+    cmds:
+      - mise exec -- stylua --check .
+      - mise exec -- selene .
+
+  fmt:
+    desc: Format Lua code with StyLua
+    cmds:
+      - mise exec -- stylua .
