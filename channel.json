@@ -1,4 +1,5 @@
 [
   "https://raw.githubusercontent.com/jheronimus/micro-plugins/main/lsp/repo.json",
-  "https://raw.githubusercontent.com/jheronimus/micro-plugins/main/filemanager/repo.json"
+  "https://raw.githubusercontent.com/jheronimus/micro-plugins/main/filemanager/repo.json",
+  "https://raw.githubusercontent.com/jheronimus/micro-plugins/main/go/repo.json"
 ]
