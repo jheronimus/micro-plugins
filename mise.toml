@@ -3,9 +3,9 @@ stylua = "latest"
 "aqua:Kampfkarren/selene" = "latest"
 
 [tasks.validate]
-description = "Validate formatting (StyLua), linting (Selene), and complexity (Lizard <= 10)"
+description = "Validate formatting (StyLua), linting (Selene), and complexity (Luacheck <= 10)"
 run = """
 stylua --check .
 selene .
-uvx lizard -C 10 -w --exclude docs .
+luacheck .
 """

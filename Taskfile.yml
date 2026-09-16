@@ -2,8 +2,8 @@ version: '3'
 
 tasks:
   validate:
-    desc: Validate formatting (StyLua), linting (Selene), and complexity (Lizard <= 10)
+    desc: Validate formatting (StyLua), linting (Selene), and complexity (Luacheck <= 10)
     cmds:
       - mise exec -- stylua --check .
       - mise exec -- selene .
-      - uvx lizard -C 10 -w --exclude docs .
+      - luacheck .
