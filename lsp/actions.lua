@@ -4,7 +4,7 @@ local commands = {
 	["hover"] = { action = hoverAction, shortcut = "Alt-k" },
 	["definition"] = { action = definitionAction, shortcut = "Alt-d" },
 	["lspcompletion"] = { action = completionAction, shortcut = "CtrlSpace" },
-	["format"] = { action = formatAction, shortcut = "Alt-f" },
+	["format"] = { action = formatAction },
 	["references"] = { action = referencesAction, shortcut = "Alt-r" },
 }
 
