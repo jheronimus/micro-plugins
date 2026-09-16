@@ -4,24 +4,16 @@ local micro = import("micro")
 local config = import("micro/config")
 local shell = import("micro/shell")
 local util = import("micro/util")
-local buffer = import("micro/buffer")
 local fmt = import("fmt")
 local go_os = import("os")
-local path = import("path")
-local filepath = import("path/filepath")
 
 cmd = {}
 currentAction = {}
 capabilities = {}
 rootUri = ""
+splitBP = nil
 
 local id = {}
-local filetype = ""
-local message = ""
-local splitBP = nil
-local tabCount = 0
-
-local json = json
 
 function init()
 	-- register all configuration options

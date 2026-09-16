@@ -4,10 +4,6 @@ local shell = import("micro/shell")
 local util = import("micro/util")
 local buffer = import("micro/buffer")
 local fmt = import("fmt")
-local go_os = import("os")
-local path = import("path")
-local filepath = import("path/filepath")
-
 local version = {}
 
 function preRune(bp, r)
@@ -94,43 +90,6 @@ function onRune(bp, r)
 
 	sendDocumentChange(bp, filetype, r)
 	checkTriggerCharacters(bp, filetype, r)
-end
-
-function onBeforeTextEvent(bp, textEvent)
-	--micro.Log('onBeforeTextEvent', bp, textEvent)
-	return
-	--[[
-	local filetype = bp.Settings["filetype"]
-	if cmd[filetype] == nil then
-		return
-	end
-	if splitBP ~= nil then
-		pcall(function() splitBP:Unsplit(); end)
-		splitBP = nil
-	end
-
-	local send = withSend(filetype)
-	local uri = getUriFromBuf(bp)
-	version[uri] = (version[uri] or 0) + 1
-
-	local changes = ''
-	-- send the change message for every delta
-	for i = 1, #textEvent.Deltas do
-		local delta = textEvent.Deltas[i]
-		local startLine = 0 + delta.Start.Y - 1
-		local startChar = 0 + delta.Start.X - 1
-		local endLine = 0 + delta.End.Y - 1
-		local endChar = 0 + delta.End.X - 1
-		local change = util.String(delta.Text):gsub("\\", "\\\\"):gsub("\n", "\\n"):gsub("\r", "\\r"):gsub('"', '\\"')
-				:gsub("\t", "\\t")
-		if #changes > 0 then changes = changes .. ',' end
-		changes = changes .. fmt.Sprintf('{"range": {"start": {"line": %d, "character": %d}, "end": {"line": %d, "character": %d}}, "text": "%s"}', startLine, startChar, endLine, endChar, change)
-	end	
-	if #changes > 0 then
-		micro.Log(changes)
-		send("textDocument/didChange", fmt.Sprintf('{"textDocument": {"version": "%.0f", "uri": "%s"}, "contentChanges": [%s]', version[uri], uri, changes))
-	end
-	--]]
 end
 
 -- alias functions for any kind of change to the document
@@ -238,9 +197,10 @@ function preInsertNewline(bp)
 		local data = util.String(cur:GetSelection())
 		local file, line, character = data:match("(./[^:]+):([^:]+):([^:]+)")
 		if not file then
+			return false
 		end
 		local doc, _ = file:gsub("^file://", "")
-		buf, _ = buffer.NewBufferFromFile(doc)
+		local buf, _ = buffer.NewBufferFromFile(doc)
 		bp:AddTab()
 		micro.CurPane():OpenBuffer(buf)
 		buf:GetActiveCursor():GotoLoc(buffer.Loc(character * 1, line * 1))

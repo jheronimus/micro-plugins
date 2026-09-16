@@ -41,8 +41,7 @@ function definitionActionResponse(bp, data)
 		return
 	end
 	local uri = (results[1].uri or results[1].targetUri)
-	local doc = uri:gsub("^file://", ""):gsub("%%[a-f0-9][a-f0-9]", function(x, y, z)
-		print("X", x)
+	local doc = uri:gsub("^file://", ""):gsub("%%[a-f0-9][a-f0-9]", function(x)
 		return string.char(tonumber(x:gsub("%%", ""), 16))
 	end)
 	local buf = bp.Buf
@@ -52,7 +51,7 @@ function definitionActionResponse(bp, data)
 		bp:AddTab()
 		micro.CurPane():OpenBuffer(buf)
 		-- shorten the displayed name in status bar
-		name = buf:GetName()
+		local name = buf:GetName()
 		local wd, _ = go_os.Getwd()
 		if name:starts(wd) then
 			buf:SetName("." .. name:sub(#wd + 1, #name + 1))

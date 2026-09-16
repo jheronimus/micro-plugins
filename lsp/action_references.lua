@@ -33,8 +33,6 @@ function referencesActionResponse(bp, data)
 		return
 	end
 
-	local file = bp.Buf.AbsPath
-
 	local msg = ""
 	for _idx, ref in ipairs(results) do
 		if msg ~= "" then
@@ -51,5 +49,5 @@ function referencesActionResponse(bp, data)
 	end
 
 	local logBuf = buffer.NewBuffer(msg, "References found")
-	local splitBP = bp:HSplitBuf(logBuf)
+	splitBP = bp:HSplitBuf(logBuf)
 end

@@ -1,16 +1,5 @@
 local fmt = import("fmt")
 
-function toBytes(str)
-	local result = {}
-	for i = 1, #str do
-		local b = str:byte(i)
-		if b < 32 then
-			table.insert(result, b)
-		end
-	end
-	return result
-end
-
 function getUriFromBuf(buf)
 	if buf == nil then
 		return
@@ -29,14 +18,6 @@ function mysplit(inputstr, sep)
 		table.insert(t, str)
 	end
 	return t
-end
-
-function table.join(tbl, sep)
-	local result = ""
-	for _, value in ipairs(tbl) do
-		result = result .. (#result > 0 and sep or "") .. value
-	end
-	return result
 end
 
 function contains(list, x)
@@ -64,7 +45,7 @@ function string.random(CharSet, Length, prefix)
 	else
 		local Result = prefix or ""
 		math.randomseed(os.time())
-		for Loop = 1, Length do
+		for _ = 1, Length do
 			local char = math.random(1, #CharSet)
 			Result = Result .. CharSet:sub(char, char)
 		end
@@ -77,7 +58,7 @@ function string.parse(text)
 	if not text:find('"jsonrpc":') then
 		return {}
 	end
-	local start, fin = text:find("\n%s*\n")
+	local _, fin = text:find("\n%s*\n")
 	local cleanedText = text
 	if fin ~= nil then
 		cleanedText = text:sub(fin)
@@ -100,5 +81,3 @@ table.filter = function(t, filterIter)
 
 	return out
 end
-
-table.unpack = table.unpack or unpack

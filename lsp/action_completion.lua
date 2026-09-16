@@ -77,44 +77,6 @@ function completionAction(bp)
 	end
 end
 
-local function countPrefixMatches(list, prefix)
-	local count = 0
-	for _, entry in ipairs(list) do
-		if getEntryText(entry):starts(prefix) then
-			count = count + 1
-		end
-	end
-	return count
-end
-
-local function buildPrefixCounts(str, list)
-	local prefixList = {}
-	for i = 1, #str do
-		local prefix = str:sub(1, i)
-		prefixList[prefix] = countPrefixMatches(list, prefix)
-	end
-	return prefixList
-end
-
-local function findLongestMatchingPrefix(prefixList, minCount)
-	local longest = ""
-	for prefix, count in pairs(prefixList) do
-		if count >= minCount and #longest < #prefix then
-			longest = prefix
-		end
-	end
-	return longest
-end
-
-function findCommon(input, list)
-	if #list == 1 then
-		return getEntryText(list[1])
-	end
-	local str = getEntryText(input)
-	local prefixList = buildPrefixCounts(str, list)
-	return findLongestMatchingPrefix(prefixList, #list)
-end
-
 local function getTriggerChars(filetype)
 	local cap = capabilities[filetype]
 	if cap and cap.completionProvider then
