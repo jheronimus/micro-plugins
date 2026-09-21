@@ -6,7 +6,7 @@
   "Versions": [
     {
       "Version": "0.6.4",
-      "Url": "https://github.com/jheronimus/micro-plugins/archive/refs/heads/main.zip",
+      "Url": "https://github.com/jheronimus/micro-plugins/releases/download/latest/lsp.zip",
       "Require": {
         "micro": ">=2.0.8"
       }

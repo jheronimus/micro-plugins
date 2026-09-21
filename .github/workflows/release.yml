@@ -1,0 +1,39 @@
+name: Release Plugins
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'filemanager/**'
+      - 'go/**'
+      - 'lsp/**'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Package plugins
+        run: |
+          mkdir -p dist
+          for dir in */; do
+            dir="${dir%/}"
+            if [ -f "$dir/repo.json" ]; then
+              echo "Packaging $dir -> dist/$dir.zip"
+              (cd "$dir" && zip -r "../dist/$dir.zip" . -x "*.DS_Store*")
+            fi
+          done
+
+      - name: Create or update release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release view latest || gh release create latest --title "Latest Plugins" --notes "Automated build of micro plugins from main branch"
+          gh release upload latest dist/*.zip --clobber

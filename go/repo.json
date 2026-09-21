@@ -7,7 +7,7 @@
 		"Versions": [
 			{
 				"Version": "2.0.3",
-				"Url": "https://github.com/jheronimus/micro-plugins/archive/refs/heads/main.zip",
+				"Url": "https://github.com/jheronimus/micro-plugins/releases/download/latest/go.zip",
 				"Require": {
 					"micro": ">=2.0.0-1"
 				}
