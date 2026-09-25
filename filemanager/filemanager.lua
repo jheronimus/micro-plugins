@@ -1,4 +1,4 @@
-VERSION = "3.5.2"
+VERSION = "3.6.0"
 
 local micro = import("micro")
 local config = import("micro/config")
@@ -6,6 +6,21 @@ local shell = import("micro/shell")
 local buffer = import("micro/buffer")
 local os = import("os")
 local filepath = import("path/filepath")
+local runtime = import("runtime")
+local icon = dofile(config.ConfigDir .. "/plug/filemanager/icon.lua")
+
+local function is_directory_item(item)
+	local icons = icon.Icons()
+	return item.dirmsg == icons["dir"] or item.dirmsg == icons["dir_open"]
+end
+
+local function is_collapsed_item(item)
+	return item.dirmsg == icon.Icons()["dir"]
+end
+
+local function is_expanded_item(item)
+	return item.dirmsg == icon.Icons()["dir_open"]
+end
 
 -- Clear out all stuff in Micro's messenger
 local function clear_messenger()
@@ -15,6 +30,9 @@ end
 
 -- Holds the micro.CurPane() we're manipulating
 local tree_view = nil
+local last_buf_pane = nil
+local changing_tabs = false
+local tree_width = 30
 -- Keeps track of the current working directory
 local current_dir = os.Getwd()
 -- Keep track of current highest visible indent to resize width appropriately
@@ -164,8 +182,7 @@ local function get_scanlist(dir, ownership, indent_n)
 
 	local function get_results_object(file_name)
 		local abs_path = filepath.Join(dir, file_name)
-		-- Use "+" for dir's, "" for files
-		local dirmsg = (is_dir(abs_path) and "+" or "")
+		local dirmsg = is_dir(abs_path) and icon.Icons()["dir"] or icon.GetIcon(file_name)
 		return new_listobj(abs_path, dirmsg, ownership, indent_n)
 	end
 
@@ -265,8 +282,8 @@ local function refresh_view()
 
 	-- If it's less than 30, just use 30 for width. Don't want it too small
 
-	if tree_view:GetView().Width < 30 then
-		tree_view:ResizePane(30)
+	if tree_view:GetView().Width < tree_width then
+		tree_view:ResizePane(tree_width)
 	end
 
 	-- Delete everything in the view/buffer
@@ -286,7 +303,7 @@ local function refresh_view()
 	-- NOTE: might want to not do all these concats in the loop, it can get slow
 	for i = 1, #scanlist do
 		-- The first 3 indicies are the dir/separator/"..", so skip them
-		if scanlist[i].dirmsg ~= "" then
+		if is_directory_item(scanlist[i]) then
 			-- Add the + or - to the left to signify if it's compressed or not
 			-- Add a forward slash to the right to signify it's a dir
 			display_content = scanlist[i].dirmsg .. " " .. get_basename(scanlist[i].abspath) .. "/"
@@ -338,7 +355,7 @@ end
 local function should_delete_item(item, index, delete_under)
 	for x = 1, #delete_under do
 		if item.owner == delete_under[x] then
-			if item.dirmsg == "-" then
+			if is_expanded_item(item) then
 				delete_under[#delete_under + 1] = index
 			end
 			if item.indent == highest_visible_indent and item.indent > 0 then
@@ -393,10 +410,10 @@ local function compress_target(y, delete_y)
 		return
 	end
 
-	if scanlist[y].dirmsg == "-" then
+	if is_expanded_item(scanlist[y]) then
 		remove_nested_children(y)
 		if not delete_y then
-			scanlist[y].dirmsg = "+"
+			scanlist[y].dirmsg = icon.Icons()["dir"]
 		end
 	elseif config.GetGlobalOption("filemanager.compressparent") and not delete_y then
 		goto_parent_dir()
@@ -407,8 +424,8 @@ local function compress_target(y, delete_y)
 		remove_target_item(y)
 	end
 
-	if tree_view:GetView().Width > (30 + highest_visible_indent) then
-		tree_view:ResizePane(30 + highest_visible_indent)
+	if tree_view:GetView().Width > (tree_width + highest_visible_indent) then
+		tree_view:ResizePane(tree_width + highest_visible_indent)
 	end
 
 	refresh_and_select()
@@ -427,7 +444,7 @@ function prompt_delete_at_cursor()
 
 	micro.InfoBar():YNPrompt(
 		"Do you want to delete the "
-			.. (scanlist[y].dirmsg ~= "" and "dir" or "file")
+			.. (is_directory_item(scanlist[y]) and "dir" or "file")
 			.. ' "'
 			.. scanlist[y].abspath
 			.. '"? ',
@@ -457,8 +474,8 @@ end
 local function update_current_dir(path)
 	-- Clear the highest since this is a full refresh
 	highest_visible_indent = 0
-	-- Set the width back to 30
-	tree_view:ResizePane(30)
+	-- Restore the configured base width.
+	tree_view:ResizePane(tree_width)
 	-- Update the current dir to the new path
 	current_dir = path
 
@@ -492,6 +509,14 @@ local function go_back_dir()
 	end
 end
 
+local function open_file(path)
+	if config.GetGlobalOption("filemanager.newtab") and last_buf_pane ~= nil then
+		last_buf_pane:NewTabCmd({ path })
+	else
+		micro.CurPane():VSplitIndex(buffer.NewBufferFromFile(path), true)
+	end
+end
+
 -- Tries to open the current index
 -- If it's the top dir indicator, or separator, nothing happens
 -- If it's ".." then it tries to go back a dir
@@ -506,14 +531,13 @@ local function try_open_at_y(y)
 		-- -2 to conform to our scanlist "missing" first 3 indicies
 		local idx = y - 2
 		if scanlist[idx] ~= nil then
-			if scanlist[idx].dirmsg ~= "" then
+			if is_directory_item(scanlist[idx]) then
 				-- if passed path is a directory, update the current dir to be one deeper..
 				update_current_dir(scanlist[idx].abspath)
 			else
 				-- If it's a file, then open it
 				micro.InfoBar():Message("Filemanager opened ", scanlist[idx].abspath)
-				-- Opens the absolute path in new vertical view
-				micro.CurPane():VSplitIndex(buffer.NewBufferFromFile(scanlist[idx].abspath), true)
+				open_file(scanlist[idx].abspath)
 			end
 		end
 	else
@@ -553,7 +577,7 @@ local function uncompress_target(y)
 	if y == 0 or scanlist_is_empty() then
 		return
 	end
-	if scanlist[y].dirmsg ~= "+" then
+	if not is_collapsed_item(scanlist[y]) then
 		return
 	end
 
@@ -562,13 +586,71 @@ local function uncompress_target(y)
 		insert_scan_results(y, scan_results)
 	end
 
-	scanlist[y].dirmsg = "-"
+	scanlist[y].dirmsg = icon.Icons()["dir_open"]
 	check_resize_pane_for_uncompress(y, scan_results)
 	refresh_and_select()
 end
 
+local path_exists
+
+local function find_item_index(path)
+	for i = 1, #scanlist do
+		if scanlist[i].abspath == path then
+			return i
+		end
+	end
+	return nil
+end
+
+local function reveal_relative_path(parts)
+	local path = current_dir
+	for i = 1, #parts do
+		path = filepath.Join(path, parts[i])
+		local index = find_item_index(path)
+		if index == nil then
+			return nil
+		end
+		if i < #parts and is_collapsed_item(scanlist[index]) then
+			uncompress_target(index)
+		end
+	end
+	return find_item_index(path)
+end
+
+local function split_relative_path(path)
+	local parts = {}
+	for part in string.gmatch(path, "[^/\\]+") do
+		parts[#parts + 1] = part
+	end
+	return parts
+end
+
+local function reveal_file(path)
+	local abs_path = filepath.Abs(path)
+	local relative = filepath.Rel(current_dir, abs_path)
+	if relative == nil or relative == ".." or string.match(relative, "^%.%.[/\\]") then
+		update_current_dir(filepath.Dir(abs_path))
+		relative = filepath.Base(abs_path)
+	end
+	local index = reveal_relative_path(split_relative_path(relative))
+	if index ~= nil then
+		tree_view.Cursor.Loc.Y = index + 2
+		select_line()
+	end
+end
+
+local function reveal_current_file(bp)
+	if tree_view == nil or not config.GetGlobalOption("filemanager.showcurrent") then
+		return
+	end
+	local path = bp.Buf.AbsPath
+	if path ~= "" and path_exists(path) and not is_dir(path) then
+		reveal_file(path)
+	end
+end
+
 -- Stat a path to check if it exists, returning true/false
-local function path_exists(path)
+path_exists = function(path)
 	local go_os = import("os")
 	-- Stat the file/dir path we created
 	-- file_stat should be non-nil, and stat_err should be nil on success
@@ -637,7 +719,7 @@ end
 
 local function resolve_create_path(filedir_name, y, scanlist_empty)
 	if not scanlist_empty and y ~= 0 then
-		if scanlist[y].dirmsg ~= "" then
+		if is_directory_item(scanlist[y]) then
 			return filepath.Join(scanlist[y].abspath, filedir_name)
 		end
 		return dirname_and_join(scanlist[y].abspath, filedir_name)
@@ -657,9 +739,9 @@ local function perform_filedir_creation(filedir_path, make_dir)
 end
 
 local function configure_new_filedir_hierarchy(new_filedir, y)
-	if scanlist[y].dirmsg == "+" then
+	if is_collapsed_item(scanlist[y]) then
 		return false
-	elseif scanlist[y].dirmsg == "-" then
+	elseif is_expanded_item(scanlist[y]) then
 		new_filedir.owner = y
 		new_filedir.indent = scanlist[y].indent + 1
 	else
@@ -713,7 +795,7 @@ local function create_filedir(filedir_name, make_dir)
 		return
 	end
 
-	local new_filedir = new_listobj(filedir_path, (make_dir and "+" or ""), 0, 0)
+	local new_filedir = new_listobj(filedir_path, (make_dir and icon.Icons()["dir"] or ""), 0, 0)
 	local last_y
 
 	if not scanlist_empty and y ~= 0 then
@@ -729,6 +811,50 @@ local function create_filedir(filedir_name, make_dir)
 
 	refresh_view()
 	select_line(last_y)
+end
+
+local function copy_at_cursor(bp, args)
+	if micro.CurPane() ~= tree_view then
+		micro.InfoBar():Message("You can't copy a file/dir if your cursor isn't in the tree!")
+		return
+	end
+	if #args < 1 then
+		micro.InfoBar():Error('When using "cp" you need to input a destination name')
+		return
+	end
+
+	local y = get_safe_y()
+	if y == 0 or scanlist_is_empty() then
+		micro.InfoBar():Error("You can't copy that")
+		return
+	end
+
+	local source = scanlist[y].abspath
+	local destination = dirname_and_join(source, args[1])
+	if path_exists(destination) then
+		micro.InfoBar():Error("You can't copy to a pre-existing name")
+		return
+	end
+
+	local output, err
+	if runtime.GOOS == "windows" then
+		output, err = shell.ExecCommand("xcopy", source, destination, "/E", "/I", "/H", "/Y")
+	else
+		output, err = shell.ExecCommand("cp", "-R", source, destination)
+	end
+	if err ~= nil then
+		micro.InfoBar():Error("Copy failed: ", err, output)
+		return
+	end
+
+	local copied = new_listobj(destination, is_dir(destination) and icon.Icons()["dir"] or "", 0, 0)
+	local last_y = tree_view.Cursor.Loc.Y + 1
+	copied.owner = scanlist[y].owner
+	copied.indent = scanlist[y].indent
+	insert_filedir_into_scanlist(copied, y)
+	refresh_view()
+	select_line(last_y)
+	micro.InfoBar():Message("Filemanager copied ", source, " to ", destination)
 end
 
 -- Triggered with "touch filename"
@@ -759,52 +885,83 @@ function new_dir(bp, args)
 	create_filedir(dir_name, true)
 end
 
--- open_tree setup's the view
-local function open_tree()
-	-- Open a new Vsplit (on the very left)
-	micro.CurPane():VSplitIndex(buffer.NewBuffer("", "filemanager"), false)
-	-- Save the new view so we can access it later
-	tree_view = micro.CurPane()
+local function find_leftmost_pane(tab)
+	local leftmost = 1
+	for i = 2, #tab.Panes do
+		if tab.Panes[i]:GetView().X < tab.Panes[leftmost]:GetView().X then
+			leftmost = i
+		end
+	end
+	return leftmost
+end
 
-	-- Set the width of tree_view to 30% & lock it
-	tree_view:ResizePane(30)
-	-- Set the type to unsavable
-	-- tree_view.Buf.Type = buffer.BTLog
+local function find_pane_index(tab, target)
+	for i = 1, #tab.Panes do
+		if tab.Panes[i] == target then
+			return i
+		end
+	end
+	return nil
+end
+
+-- open_tree sets up the view
+local function open_tree(pane)
+	pane = pane or micro.CurPane()
+	last_buf_pane = pane
+	local tab = pane:Tab()
+	local leftmost = find_leftmost_pane(tab)
+	tab.Panes[leftmost]:VSplitIndex(buffer.NewBuffer("", "filemanager"), false)
+	tree_view = micro.CurPane()
+	tree_view:ResizePane(tree_width)
 	tree_view.Buf.Type.Scratch = true
 	tree_view.Buf.Type.Readonly = true
-
-	-- Set the various display settings, but only on our view (by using SetLocalOption instead of SetOption)
-	-- NOTE: Micro requires the true/false to be a string
-	-- Softwrap long strings (the file/dir paths)
 	tree_view.Buf:SetOptionNative("softwrap", true)
-	-- No line numbering
 	tree_view.Buf:SetOptionNative("ruler", false)
-	-- Is this needed with new non-savable settings from being "vtLog"?
 	tree_view.Buf:SetOptionNative("autosave", false)
-	-- Don't show the statusline to differentiate the view from normal views
 	tree_view.Buf:SetOptionNative("statusformatr", "")
 	tree_view.Buf:SetOptionNative("statusformatl", "filemanager")
 	tree_view.Buf:SetOptionNative("scrollbar", false)
 
-	-- Fill the scanlist, and then print its contents to tree_view
 	update_current_dir(os.Getwd())
+	local pane_index = find_pane_index(tab, pane)
+	if pane_index ~= nil then
+		tab:SetActive(pane_index - 1)
+	end
+	reveal_current_file(pane)
 end
 
 -- close_tree will close the tree plugin view and release memory.
 local function close_tree()
 	if tree_view ~= nil then
-		tree_view:Quit()
+		local view_to_close = tree_view
 		tree_view = nil
+		view_to_close:Unsplit()
 		clear_messenger()
 	end
 end
 
+local function move_tree_to_pane(bp)
+	if tree_view == nil or not config.GetGlobalOption("filemanager.persist") then
+		return
+	end
+	if tree_view:Tab() ~= bp:Tab() then
+		changing_tabs = true
+		close_tree()
+		open_tree(bp)
+		changing_tabs = false
+	end
+end
+
 -- toggle_tree will toggle the tree view visible (create) and hide (delete).
-function toggle_tree()
+function toggle_tree(bp)
+	bp = bp or micro.CurPane()
 	if tree_view == nil then
-		open_tree()
+		open_tree(bp)
+	elseif bp:Tab() == tree_view:Tab() then
+		close_tree()
 	else
 		close_tree()
+		open_tree(bp)
 	end
 end
 
@@ -840,7 +997,7 @@ function goto_prev_dir()
 		for i = cur_y - 1, 1, -1 do
 			move_count = move_count + 1
 			-- If a dir, stop counting
-			if scanlist[i].dirmsg ~= "" then
+			if is_directory_item(scanlist[i]) then
 				-- Jump to its parent (the ownership)
 				tree_view.Cursor:UpN(move_count)
 				select_line()
@@ -869,7 +1026,7 @@ function goto_next_dir()
 		for i = cur_y + 1, #scanlist do
 			move_count = move_count + 1
 			-- If a dir, stop counting
-			if scanlist[i].dirmsg ~= "" then
+			if is_directory_item(scanlist[i]) then
 				-- Jump to its parent (the ownership)
 				tree_view.Cursor:DownN(move_count)
 				select_line()
@@ -943,6 +1100,20 @@ end
 -- All the events for certain Micro keys go below here
 -- Other than things we flat-out fail
 -- ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+function onSetActive(bp)
+	if changing_tabs or bp == tree_view then
+		return
+	end
+	move_tree_to_pane(bp)
+	reveal_current_file(bp)
+end
+
+function onBufPaneOpen(bp)
+	if tree_view ~= nil and bp ~= tree_view then
+		tree_view:ResizePane(tree_width)
+	end
+end
 
 -- Close current
 function preQuit(view)
@@ -1277,6 +1448,10 @@ function preSelectAll(view)
 	return false_if_tree(view)
 end
 
+function FileIcon(buf)
+	return icon.GetIcon(buf.Path)
+end
+
 function init()
 	-- Let the user disable showing of dotfiles like ".editorconfig" or ".DS_STORE"
 	config.RegisterCommonOption("filemanager", "showdotfiles", true)
@@ -1287,8 +1462,15 @@ function init()
 	-- Let the user choose to list sub-folders first when listing the contents of a folder
 	config.RegisterCommonOption("filemanager", "foldersfirst", true)
 	-- Lets the user have the filetree auto-open any time Micro is opened
-	-- false by default, as it's a rather noticable user-facing change
+	-- false by default, as it's a rather noticeable user-facing change
 	config.RegisterCommonOption("filemanager", "openonstart", false)
+	config.RegisterCommonOption("filemanager", "nerdfonts", false)
+	config.RegisterCommonOption("filemanager", "showcurrent", true)
+	config.RegisterCommonOption("filemanager", "newtab", true)
+	config.RegisterCommonOption("filemanager", "treewidth", 30)
+	config.RegisterCommonOption("filemanager", "persist", true)
+
+	micro.SetStatusInfoFn("filemanager.FileIcon")
 
 	-- Open/close the tree view
 	config.MakeCommand("tree", toggle_tree, config.NoComplete)
@@ -1300,9 +1482,12 @@ function init()
 	config.MakeCommand("mkdir", new_dir, config.NoComplete)
 	-- Delete a file/dir, and anything contained in it if it's a dir
 	config.MakeCommand("rm", prompt_delete_at_cursor, config.NoComplete)
+	-- Copy the file/dir under the cursor
+	config.MakeCommand("cp", copy_at_cursor, config.NoComplete)
 	-- Adds colors to the ".." and any dir's in the tree view via syntax highlighting
 	-- TODO: Change it to work with git, based on untracked/changed/added/whatever
 	config.AddRuntimeFile("filemanager", config.RTSyntax, "syntax.yaml")
+	tree_width = config.GetGlobalOption("filemanager.treewidth")
 
 	-- NOTE: This must be below the syntax load command or coloring won't work
 	-- Just auto-open if the option is enabled

@@ -2,6 +2,8 @@
 
 A simple plugin that allows for easy navigation of a file tree.
 
+Version 3.6.0 ports features from [`Neko-Box-Coder/filemanager2`](https://github.com/Neko-Box-Coder/filemanager2) while retaining this plugin's Micro 2 compatibility and quality checks.
+
 ![Example picture](./example.jpg?raw=true "Example")
 
 **Installation:** run `plugin install filemanager` and restart Micro.
@@ -25,6 +27,11 @@ If the directory is expanded, there will be a `+` to the left of it. If it is co
 | `filemanager-compressparent` | Collapse the parent dir when left is pressed on a child file | `true`  |
 | `filemanager-foldersfirst`   | Sorts folders above any files                                | `true`  |
 | `filemanager-openonstart`    | Automatically open the file tree when starting Micro         | `false` |
+| `filemanager-nerdfonts`     | Use Nerd Font file and directory icons                        | `false` |
+| `filemanager-showcurrent`    | Reveal and select the current file in the tree                 | `true`  |
+| `filemanager-newtab`         | Open files in new tabs instead of vertical splits              | `true`  |
+| `filemanager-treewidth`      | Minimum tree pane width                                         | `30`    |
+| `filemanager-persist`        | Keep the tree available when switching tabs                    | `true`  |
 
 ### Commands and Keybindings
 
@@ -45,11 +52,12 @@ If you want to [keybind](https://github.com/zyedidia/micro/blob/master/runtime/h
 | `rename` | -                          | Rename the file/directory your cursor is on, using the passed name                          | `filemanager.rename_at_cursor`        |
 | `touch`  | -                          | Make a new file under/into the file/directory your cursor is on, using the passed name      | `filemanager.new_file`                |
 | `mkdir`  | -                          | Make a new directory under/into the file/directory your cursor is on, using the passed name | `filemanager.new_dir`                 |
+| `cp`     | -                          | Copy the current file/directory using the passed destination name                          | `filemanager.copy_at_cursor`          |
 
 #### Notes
 
-- `rename`, `touch`, and `mkdir` require a name to be passed when calling.\
-  Example: `rename newnamehere`, `touch filenamehere`, `mkdir dirnamehere`.\
+- `rename`, `touch`, `mkdir`, and `cp` require a name to be passed when calling.\
+  Example: `rename newnamehere`, `touch filenamehere`, `mkdir dirnamehere`, `cp copyhere`.\
   If the passed name already exists in the current dir, it will cancel instead of overwriting (for safety).
 
 - The <kbd>Ctrl w</kbd> keybinding is to switch which buffer your cursor is on.\

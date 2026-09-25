@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/) a
 
 ## [Unreleased]
 
+## [3.6.0] - 2026-09-25
+
+### Added
+
+- Copy files and directories with the `cp` command without shell interpolation.
+- Optional Nerd Font file and directory icons.
+- Automatic reveal and selection of the current file.
+- Configurable new-tab opening and minimum tree width.
+- Optional persistent tree behavior when switching tabs.
+
 ## [3.4.0] - 2018-10-22
 
 ### Fixed

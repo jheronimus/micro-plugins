@@ -10,6 +10,7 @@ Forked several plugins for the [Micro](https://github.com/zyedidia/micro) text e
 - **[`filemanager`](./filemanager/)**: VS Code-like file tree sidebar.
   - Fixes mouse-click crashes on Micro 2.x (removes deprecated `GetMouseClickLocation`).
   - Adds boundary checks to prevent crashes when clicking empty space below file lists.
+  - Adds safe copy commands, optional Nerd Font icons, current-file reveal, new-tab opening, configurable width, and persistent tabs.
 - **[`go`](./go/)**: Go language support (`gofmt`, `goimports`, and `gorename`).
 - **[`delve`](./delve/)**: Delve debugger integration for stepping through Go code, setting breakpoints, and inspecting variables.
   - Imported from [`serge-v/micro-delve`](https://github.com/serge-v/micro-delve).

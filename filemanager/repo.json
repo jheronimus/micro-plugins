@@ -6,7 +6,7 @@
 		"Website": "https://github.com/jheronimus/micro-plugins",
 		"Versions": [
 			{
-				"Version": "3.5.2",
+				"Version": "3.6.0",
 				"Url": "https://github.com/jheronimus/micro-plugins/releases/download/latest/filemanager.zip",
 				"Require": {
 					"micro": ">=2.0.0-1"
