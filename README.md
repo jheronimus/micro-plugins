@@ -11,6 +11,8 @@ Forked several plugins for the [Micro](https://github.com/zyedidia/micro) text e
   - Fixes mouse-click crashes on Micro 2.x (removes deprecated `GetMouseClickLocation`).
   - Adds boundary checks to prevent crashes when clicking empty space below file lists.
 - **[`go`](./go/)**: Go language support (`gofmt`, `goimports`, and `gorename`).
+- **[`delve`](./delve/)**: Delve debugger integration for stepping through Go code, setting breakpoints, and inspecting variables.
+  - Imported from [`serge-v/micro-delve`](https://github.com/serge-v/micro-delve).
 
 ## Installation
 
@@ -31,6 +33,7 @@ Then install any plugin via Micro's CLI:
 micro -plugin install lsp
 micro -plugin install filemanager
 micro -plugin install go
+micro -plugin install delve
 ```
 
 ## Local Development & Validation
