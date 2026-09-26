@@ -13,6 +13,7 @@ This help page can be viewed in Micro editor with Ctrl-E 'help lsp'
 - Show references to the current symbol in a buffer (alt-R)
   (textDocument/references), pressing return on the reference line, the
   reference's location is opened in a new tab
+- Rename symbol across files (F6 or `> rename <newname>`) (textDocument/rename)
 
 There is initial support for completion (ctrl-space) (textDocument/completion).
 

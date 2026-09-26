@@ -210,10 +210,6 @@ function preInsertNewline(bp)
 end
 
 function preSave(bp)
-	local filetype = bp.Buf:FileType()
-	if filetype == "go" then
-		return
-	end
 	if config.GetGlobalOption("lsp.formatOnSave") then
 		onRune(bp)
 		formatAction(bp, function()

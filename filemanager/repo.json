@@ -1,7 +1,7 @@
 [
 	{
 		"Name": "filemanager",
-		"Description": "File manager for Micro (jheronimus fork)",
+		"Description": "File manager for Micro",
 		"Tags": ["filetree", "filemanager", "file", "manager"],
 		"Website": "https://github.com/jheronimus/micro-plugins",
 		"Versions": [

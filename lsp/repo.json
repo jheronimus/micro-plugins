@@ -1,6 +1,6 @@
 [{
   "Name": "lsp",
-  "Description": "Generic LSP Client for Micro (jheronimus fork)",
+  "Description": "Generic LSP client for Micro",
   "Website": "https://github.com/jheronimus/micro-plugins",
   "Tags": ["lsp"],
   "Versions": [

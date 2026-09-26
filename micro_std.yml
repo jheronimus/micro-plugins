@@ -38,6 +38,8 @@ globals:
     any: true
   referencesAction:
     any: true
+  renameAction:
+    any: true
   onStdout:
     any: true
   onStderr:
@@ -65,4 +67,8 @@ globals:
   found:
     any: true
   json:
+    any: true
+  defaultTools:
+    any: true
+  defaultServers:
     any: true

@@ -1,6 +1,6 @@
 [
   "https://raw.githubusercontent.com/jheronimus/micro-plugins/main/lsp/repo.json",
   "https://raw.githubusercontent.com/jheronimus/micro-plugins/main/filemanager/repo.json",
-  "https://raw.githubusercontent.com/jheronimus/micro-plugins/main/go/repo.json",
+  "https://raw.githubusercontent.com/jheronimus/micro-plugins/main/autofmt/repo.json",
   "https://raw.githubusercontent.com/jheronimus/micro-plugins/main/delve/repo.json"
 ]

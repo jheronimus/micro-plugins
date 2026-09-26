@@ -6,6 +6,7 @@ local commands = {
 	["lspcompletion"] = { action = completionAction, shortcut = "CtrlSpace" },
 	["format"] = { action = formatAction },
 	["references"] = { action = referencesAction, shortcut = "Alt-r" },
+	["rename"] = { action = renameAction, shortcut = "F6" },
 }
 
 function defineActions()

@@ -1,0 +1,15 @@
+[{
+  "Name": "autofmt",
+  "Description": "Automatic multi-language code formatter with host binary detection",
+  "Tags": ["formatting", "autofmt"],
+  "Website": "https://github.com/jheronimus/micro-plugins",
+  "Versions": [
+    {
+      "Version": "1.0.0",
+      "Url": "https://github.com/jheronimus/micro-plugins/releases/download/latest/autofmt.zip",
+      "Require": {
+        "micro": ">=2.0.8"
+      }
+    }
+  ]
+}]

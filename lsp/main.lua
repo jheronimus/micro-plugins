@@ -17,11 +17,7 @@ local id = {}
 
 function init()
 	-- register all configuration options
-	config.RegisterCommonOption(
-		"lsp",
-		"server",
-		'python=pylsp,go=gopls,typescript=deno lsp={"enable":true},javascript=deno lsp={"enable":true},markdown=deno lsp={"enable":true},json=deno lsp={"enable":true},jsonc=deno lsp={"enable":true},rust=rust-analyzer,lua=lua-language-server,c++=clangd,dart=dart language-server'
-	)
+	config.RegisterCommonOption("lsp", "server", "")
 	config.RegisterCommonOption("lsp", "formatOnSave", false)
 	config.RegisterCommonOption("lsp", "autocompleteDetails", false)
 	config.RegisterCommonOption("lsp", "ignoreMessages", "")
@@ -42,18 +38,45 @@ function parseOptions(inputstr)
 	return mysplit(inputstr, ",")
 end
 
-local function resolveServerSettings()
+local binCache = {}
+
+local function isBinaryInstalled(bin)
+	if binCache[bin] ~= nil then
+		return binCache[bin]
+	end
+	local _, err = shell.ExecCommand("which", bin)
+	local installed = err == nil
+	binCache[bin] = installed
+	return installed
+end
+
+local function pickServerFromCandidates(filetype)
+	local candidates = defaultServers[filetype]
+	if not candidates then
+		return nil
+	end
+	for _, cand in ipairs(candidates) do
+		local run = mysplit(cand, "%s")
+		local runCmd = run[1]
+		if runCmd and isBinaryInstalled(runCmd) then
+			return cand
+		end
+	end
+	return nil
+end
+
+local function findExplicitServer(filetype)
 	local envSettings, _ = go_os.Getenv("MICRO_LSP")
-	local settings = config.GetGlobalOption("lsp.server")
-	local fallback =
-		'python=pylsp,go=gopls,typescript=deno lsp={"enable":true},javascript=deno lsp={"enable":true},markdown=deno lsp={"enable":true},json=deno lsp={"enable":true},jsonc=deno lsp={"enable":true},rust=rust-analyzer,lua=lua-language-server,c++=clangd,dart=dart language-server'
-	if envSettings ~= nil and #envSettings > 0 then
-		settings = envSettings
+	local settings = envSettings or config.GetGlobalOption("lsp.server")
+	if settings and #settings > 0 then
+		for _, entry in ipairs(parseOptions(settings)) do
+			local part = mysplit(entry, "=")
+			if filetype == part[1] then
+				return part
+			end
+		end
 	end
-	if settings ~= nil and #settings > 0 then
-		return settings .. "," .. fallback
-	end
-	return fallback
+	return nil
 end
 
 local function decodeArgs(args)
@@ -106,15 +129,16 @@ end
 function startServer(filetype, callback, targetBuf)
 	local wd, _ = go_os.Getwd()
 	rootUri = fmt.Sprintf("file://%s", wd)
-	local settings = resolveServerSettings()
-	local server = parseOptions(settings)
-	micro.Log("Server Options", server)
-	for _, entry in ipairs(server) do
-		local part = mysplit(entry, "=")
-		if filetype == part[1] then
-			launchServer(part, filetype, callback, targetBuf)
-			return
-		end
+
+	local explicit = findExplicitServer(filetype)
+	if explicit then
+		launchServer(explicit, filetype, callback, targetBuf)
+		return
+	end
+
+	local detected = pickServerFromCandidates(filetype)
+	if detected then
+		launchServer({ filetype, detected }, filetype, callback, targetBuf)
 	end
 end
 
