@@ -268,7 +268,8 @@ local function collectPaneBuffers(tab, targetPath, matched)
 	if not tab.Panes then
 		return
 	end
-	for _, pane in ipairs(tab.Panes) do
+	for i = 1, #tab.Panes do
+		local pane = tab.Panes[i]
 		if pane.Buf and pane.Buf.AbsPath == targetPath then
 			table.insert(matched, pane.Buf)
 		end
@@ -282,7 +283,8 @@ local function findBuffersByUri(targetUri)
 	if not tabs or not tabs.List then
 		return matched
 	end
-	for _, tab in ipairs(tabs.List) do
+	for i = 1, #tabs.List do
+		local tab = tabs.List[i]
 		collectPaneBuffers(tab, targetPath, matched)
 	end
 	return matched
