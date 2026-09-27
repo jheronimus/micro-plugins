@@ -1,9 +1,12 @@
-VERSION = "1.0.0"
+VERSION = "1.0.1"
 
 local micro = import("micro")
 local config = import("micro/config")
 local shell = import("micro/shell")
 local filepath = import("path/filepath")
+
+-- Must be registered at top-level so defaults apply before buffers are created
+config.RegisterCommonOption("autofmt", "onsave", true)
 
 local binCache = {}
 
@@ -33,6 +36,9 @@ end
 
 local function resolveTool(filetype, settings)
 	local opt = settings["autofmt.for-" .. filetype]
+	if opt == nil then
+		opt = config.GetGlobalOption("autofmt.for-" .. filetype)
+	end
 	if opt == "off" then
 		return nil
 	end
@@ -66,8 +72,14 @@ end
 
 local function executeFormat(bp, tool)
 	bp:Save()
-	local dirPath, _ = filepath.Split(bp.Buf.AbsPath)
 	local filePath = bp.Buf.AbsPath
+	if filePath == nil or filePath == "" then
+		filePath = bp.Buf.Path
+	end
+	local dirPath, _ = filepath.Split(filePath)
+	if dirPath == "" then
+		dirPath = "."
+	end
 
 	local ok = true
 	if type(tool) == "table" then
@@ -86,8 +98,16 @@ local function executeFormat(bp, tool)
 	end
 end
 
+local function shouldFormatOnSave(settings)
+	local opt = settings["autofmt.onsave"]
+	if opt == nil then
+		opt = config.GetGlobalOption("autofmt.onsave")
+	end
+	return opt ~= false
+end
+
 function onSave(bp)
-	if not bp.Buf.Settings["autofmt.onsave"] then
+	if not shouldFormatOnSave(bp.Buf.Settings) then
 		return true
 	end
 	local filetype = bp.Buf:FileType()
@@ -113,7 +133,6 @@ function fmtCommand(bp, args)
 end
 
 function init()
-	config.RegisterCommonOption("autofmt", "onsave", true)
 	config.MakeCommand("fmt", fmtCommand, config.NoComplete)
 	config.AddRuntimeFile("autofmt", config.RTHelp, "help/autofmt.md")
 end

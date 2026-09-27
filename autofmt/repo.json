@@ -5,7 +5,7 @@
   "Website": "https://github.com/jheronimus/micro-plugins",
   "Versions": [
     {
-      "Version": "1.0.0",
+      "Version": "1.0.1",
       "Url": "https://github.com/jheronimus/micro-plugins/releases/download/latest/autofmt.zip",
       "Require": {
         "micro": ">=2.0.8"
