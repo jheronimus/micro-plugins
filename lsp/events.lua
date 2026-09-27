@@ -376,18 +376,19 @@ local function handleLspMessage(filetype, data, rawMessage)
 end
 
 local function extractNextMessage(msg)
-	local cleanMsg = msg:gsub("}Content%-Length:", "}\0Content-Length:")
-	local entries = mysplit(cleanMsg, "\0")
-	if #entries > 1 then
-		micro.Log("Found break")
-		return entries[1], entries[2]
+	local s = msg:find("}%s*Content%-Length:")
+	if s then
+		local current = msg:sub(1, s)
+		local nextMsg = msg:sub(s + 1):match("^%s*(.-)$")
+		return current, nextMsg
 	end
-	return cleanMsg, nil
+	return msg, nil
 end
 
 function onStdout(filetype)
-	local nextMessage = ""
-	return function(text)
+	local message = ""
+	local handler
+	handler = function(text)
 		if text:starts("Content-Length:") then
 			message = text
 		else
@@ -395,9 +396,6 @@ function onStdout(filetype)
 		end
 		local currentMsg, nextMsg = extractNextMessage(message)
 		message = currentMsg
-		if nextMsg then
-			nextMessage = nextMsg
-		end
 		if not message:ends("}") then
 			micro.Log("Message incomplete, ignoring for now...")
 			return
@@ -411,12 +409,11 @@ function onStdout(filetype)
 		micro.Log(filetype .. " <<< " .. (data.method or "no method"))
 		handleLspMessage(filetype, data, message)
 
-		if nextMessage then
-			local nm = nextMessage
-			nextMessage = nil
-			onStdout(filetype)(nm)
+		if nextMsg and #nextMsg > 0 then
+			handler(nextMsg)
 		end
 	end
+	return handler
 end
 
 function onStderr(text)
