@@ -21,26 +21,27 @@ end
 
 -- Expects the given pos to be the first character after the opening quote.
 -- Returns val, pos; the returned pos is after the closing quote character.
-local function parse_str_val(str, pos, val)
-	val = val or ""
-	local early_end_error = "End of input found while parsing string."
-	if pos > #str then
-		error(early_end_error)
-	end
-	local c = str:sub(pos, pos)
-	if c == '"' then
-		return val, pos + 1
-	end
-	if c ~= "\\" then
-		return parse_str_val(str, pos + 1, val .. c)
-	end
-	-- We must have a \ character.
+local function parse_str_val(str, pos)
+	local chars = {}
+	local len = #str
 	local esc_map = { b = "\b", f = "\f", n = "\n", r = "\r", t = "\t" }
-	local nextc = str:sub(pos + 1, pos + 1)
-	if not nextc then
-		error(early_end_error)
+	while pos <= len do
+		local c = str:sub(pos, pos)
+		if c == '"' then
+			return table.concat(chars), pos + 1
+		elseif c == "\\" then
+			local nextc = str:sub(pos + 1, pos + 1)
+			if not nextc or nextc == "" then
+				error("End of input found while parsing string.")
+			end
+			table.insert(chars, esc_map[nextc] or nextc)
+			pos = pos + 2
+		else
+			table.insert(chars, c)
+			pos = pos + 1
+		end
 	end
-	return parse_str_val(str, pos + 2, val .. (esc_map[nextc] or nextc))
+	error("End of input found while parsing string.")
 end
 
 -- Returns val, pos; the returned pos is after the number's final character.

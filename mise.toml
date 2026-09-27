@@ -2,10 +2,19 @@
 stylua = "latest"
 "aqua:Kampfkarren/selene" = "latest"
 
+[tasks.test]
+description = "Run plugin runtime smoke tests against Micro's Go/Lua engine"
+run = "go test -C ../editor -v -count=1 -run TestPluginsSmoke ./cmd/micro"
+
 [tasks.validate]
-description = "Validate formatting (StyLua), linting (Selene), and complexity (Luacheck <= 10)"
+description = "Validate formatting (StyLua), linting (Selene), complexity (Luacheck <= 10), and smoke tests"
 run = """
 stylua --check .
 selene .
 luacheck .
+if rg -n "ipairs\\([^)]*\\.(Panes|List|Lines|cursors)\\)" .; then
+  echo "ERROR: Do not use ipairs() on Go slice userdata (Panes, List, Lines, cursors). Use numeric for i = 1, #slice do instead."
+  exit 1
+fi
+mise run test
 """

@@ -1,4 +1,5 @@
 local fmt = import("fmt")
+local micro = import("micro")
 
 function getUriFromBuf(buf)
 	if buf == nil then
@@ -64,10 +65,10 @@ function string.parse(text)
 	if not text:find('"jsonrpc":') then
 		return {}
 	end
-	local _, fin = text:find("\n%s*\n")
+	local _, fin = text:find("\r*\n\r*\n")
 	local cleanedText = text
 	if fin ~= nil then
-		cleanedText = text:sub(fin)
+		cleanedText = text:sub(fin + 1)
 	end
 	local status, res = pcall(json.parse, cleanedText)
 	if status then
