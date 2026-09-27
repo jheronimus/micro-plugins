@@ -31,12 +31,6 @@ local function applyEditsToBuffer(pane, edits)
 	pane.Cursor:GotoLoc(xy)
 end
 
-local function normalizeUri(rawUri)
-	return rawUri:gsub("^file://", ""):gsub("%%[a-f0-9][a-f0-9]", function(x)
-		return string.char(tonumber(x:gsub("%%", ""), 16))
-	end)
-end
-
 local function collectChanges(result)
 	local fileEdits = {}
 	if result.changes then

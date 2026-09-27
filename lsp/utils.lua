@@ -9,6 +9,12 @@ function getUriFromBuf(buf)
 	return uri
 end
 
+function normalizeUri(rawUri)
+	return rawUri:gsub("^file://", ""):gsub("%%[a-f0-9][a-f0-9]", function(x)
+		return string.char(tonumber(x:gsub("%%", ""), 16))
+	end)
+end
+
 function mysplit(inputstr, sep)
 	if sep == nil then
 		sep = "%s"

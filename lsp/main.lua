@@ -1,4 +1,4 @@
-VERSION = "0.6.4"
+VERSION = "0.6.5"
 
 local micro = import("micro")
 local config = import("micro/config")
@@ -12,6 +12,7 @@ currentAction = {}
 capabilities = {}
 rootUri = ""
 splitBP = nil
+version = {}
 
 local id = {}
 
@@ -117,7 +118,7 @@ local function launchServer(part, filetype, callback, targetBuf)
 	send(
 		currentAction[part[1]].method,
 		fmt.Sprintf(
-			'{"processId": %.0f, "rootUri": "%s", "workspaceFolders": [{"name": "root", "uri": "%s"}], "initializationOptions": %s, "capabilities": {"textDocument": {"hover": {"contentFormat": ["plaintext", "markdown"]}, "publishDiagnostics": {"relatedInformation": false, "versionSupport": false, "codeDescriptionSupport": true, "dataSupport": true}, "signatureHelp": {"signatureInformation": {"documentationFormat": ["plaintext", "markdown"]}}}}}',
+			'{"processId": %.0f, "rootUri": "%s", "workspaceFolders": [{"name": "root", "uri": "%s"}], "initializationOptions": %s, "capabilities": {"textDocument": {"hover": {"contentFormat": ["plaintext", "markdown"]}, "publishDiagnostics": {"relatedInformation": false, "versionSupport": true, "codeDescriptionSupport": true, "dataSupport": true}, "signatureHelp": {"signatureInformation": {"documentationFormat": ["plaintext", "markdown"]}}}}}',
 			go_os.Getpid(),
 			rootUri,
 			rootUri,
@@ -169,6 +170,7 @@ function handleInitialized(buf, filetype)
 	micro.Log("Found running lsp server for ", filetype, "firing textDocument/didOpen...")
 	local send = withSend(filetype)
 	local uri = getUriFromBuf(buf)
+	version[uri] = 1
 	local content = util.String(buf:Bytes())
 		:gsub("\\", "\\\\")
 		:gsub("\n", "\\n")

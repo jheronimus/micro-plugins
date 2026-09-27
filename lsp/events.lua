@@ -4,7 +4,7 @@ local shell = import("micro/shell")
 local util = import("micro/util")
 local buffer = import("micro/buffer")
 local fmt = import("fmt")
-local version = {}
+version = version or {}
 
 function preRune(bp, r)
 	if splitBP ~= nil then
@@ -224,6 +224,8 @@ function onSave(bp)
 		return
 	end
 
+	sendDocumentChange(bp, filetype, nil)
+
 	local send = withSend(filetype)
 	local uri = getUriFromBuf(bp.Buf)
 
@@ -262,20 +264,60 @@ local function applyDiagnosticMessage(bp, diagnostic)
 	end
 end
 
+local function collectPaneBuffers(tab, targetPath, matched)
+	if not tab.Panes then
+		return
+	end
+	for _, pane in ipairs(tab.Panes) do
+		if pane.Buf and pane.Buf.AbsPath == targetPath then
+			table.insert(matched, pane.Buf)
+		end
+	end
+end
+
+local function findBuffersByUri(targetUri)
+	local targetPath = normalizeUri(targetUri)
+	local matched = {}
+	local tabs = micro.Tabs()
+	if not tabs or not tabs.List then
+		return matched
+	end
+	for _, tab in ipairs(tabs.List) do
+		collectPaneBuffers(tab, targetPath, matched)
+	end
+	return matched
+end
+
+local function isOutdatedDiagnostic(data)
+	local docVersion = data.params.version
+	local targetUri = data.params.uri
+	return docVersion ~= nil and version[targetUri] ~= nil and docVersion < version[targetUri]
+end
+
+local function updateBufferDiagnostics(buf, diagnostics)
+	buf:ClearMessages("lsp")
+	for _, diagnostic in ipairs(diagnostics or {}) do
+		applyDiagnosticMessage(buf, diagnostic)
+	end
+end
+
 local function handlePublishDiagnostics(data)
-	local cur = micro.CurPane()
-	if cur == nil or cur.Buf == nil then
+	if not data.params or not data.params.uri then
 		return
 	end
-	local bp = cur.Buf
-	bp:ClearMessages("lsp")
-	bp:AddMessage(buffer.NewMessage("lsp", "", buffer.Loc(0, 10000000), buffer.Loc(0, 10000000), buffer.MTInfo))
-	local uri = getUriFromBuf(bp)
-	if data.params.uri ~= uri then
+	if isOutdatedDiagnostic(data) then
+		micro.Log("Dropping outdated diagnostics for", data.params.uri)
 		return
 	end
-	for _, diagnostic in ipairs(data.params.diagnostics) do
-		applyDiagnosticMessage(bp, diagnostic)
+	local bufs = findBuffersByUri(data.params.uri)
+	if #bufs == 0 and micro.CurPane() ~= nil and micro.CurPane().Buf ~= nil then
+		local curBuf = micro.CurPane().Buf
+		if normalizeUri(data.params.uri) == curBuf.AbsPath then
+			table.insert(bufs, curBuf)
+		end
+	end
+	for _, buf in ipairs(bufs) do
+		updateBufferDiagnostics(buf, data.params.diagnostics)
 	end
 end
 

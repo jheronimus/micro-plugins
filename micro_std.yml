@@ -72,3 +72,7 @@ globals:
     any: true
   defaultServers:
     any: true
+  version:
+    any: true
+  normalizeUri:
+    any: true

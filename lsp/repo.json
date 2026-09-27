@@ -5,7 +5,7 @@
   "Tags": ["lsp"],
   "Versions": [
     {
-      "Version": "0.6.4",
+      "Version": "0.6.5",
       "Url": "https://github.com/jheronimus/micro-plugins/releases/download/latest/lsp.zip",
       "Require": {
         "micro": ">=2.0.8"
