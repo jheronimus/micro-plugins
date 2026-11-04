@@ -221,6 +221,7 @@ local function showCompletionDetails(bp, entry)
 end
 
 local function performCompletion(bp, results)
+	local file = bp.Buf.AbsPath
 	local xy = buffer.Loc(bp.Cursor.X, bp.Cursor.Y)
 	local start = xy
 	local originalStart = start
@@ -245,6 +246,7 @@ local function performCompletion(bp, results)
 	bp.Cursor:GotoLoc(originalStart)
 	bp.Cursor:SetSelectionStart(start)
 	bp.Cursor:SetSelectionEnd(finalXy)
+	lastCompletion = { file, finalXy.Y, finalXy.X }
 
 	showCompletionDetails(bp, entry)
 end
