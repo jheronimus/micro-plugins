@@ -26,19 +26,22 @@ local function parse_str_val(str, pos)
 	local len = #str
 	local esc_map = { b = "\b", f = "\f", n = "\n", r = "\r", t = "\t" }
 	while pos <= len do
-		local c = str:sub(pos, pos)
-		if c == '"' then
-			return table.concat(chars), pos + 1
-		elseif c == "\\" then
-			local nextc = str:sub(pos + 1, pos + 1)
-			if not nextc or nextc == "" then
-				error("End of input found while parsing string.")
-			end
-			table.insert(chars, esc_map[nextc] or nextc)
-			pos = pos + 2
+		local chunk = str:match('^([^"\\]+)', pos)
+		if chunk then
+			table.insert(chars, chunk)
+			pos = pos + #chunk
 		else
-			table.insert(chars, c)
-			pos = pos + 1
+			local c = str:sub(pos, pos)
+			if c == '"' then
+				return table.concat(chars), pos + 1
+			elseif c == "\\" then
+				local nextc = str:sub(pos + 1, pos + 1)
+				if not nextc or nextc == "" then
+					error("End of input found while parsing string.")
+				end
+				table.insert(chars, esc_map[nextc] or nextc)
+				pos = pos + 2
+			end
 		end
 	end
 	error("End of input found while parsing string.")
