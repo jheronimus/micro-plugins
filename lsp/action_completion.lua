@@ -5,8 +5,8 @@ local buffer = import("micro/buffer")
 local fmt = import("fmt")
 
 local lastCompletion = {}
-local completionCursor = 0
-local doAutoCompletion = nil
+local currentResults = nil
+local showCompletionDetails = nil
 
 local function getEntryText(entry)
 	if entry.textEdit and entry.textEdit.newText then
@@ -53,28 +53,33 @@ local function requestCompletion(bp, filetype, file, line, char)
 end
 
 function completionAction(bp)
+	if bp.Buf.HasSuggestions then
+		bp.Buf:CycleAutocomplete(true)
+		if currentResults and #currentResults > 0 then
+			local idx = bp.Buf.CurSuggestion
+			local entry = currentResults[(idx % #currentResults) + 1]
+			if entry then
+				showCompletionDetails(bp, entry)
+			end
+		end
+		return
+	end
+
 	local filetype = bp.Buf:FileType()
 	local file = bp.Buf.AbsPath
 	local line = bp.Buf:GetActiveCursor().Y
 	local char = bp.Buf:GetActiveCursor().X
 
-	if lastCompletion[1] == file and lastCompletion[2] == line and lastCompletion[3] == char then
-		completionCursor = completionCursor + 1
-	else
-		completionCursor = 0
-		if shouldIndent(bp, char, line) then
-			return
-		end
+	if shouldIndent(bp, char, line) then
+		return
 	end
-	if completionCursor == 0 then
-		doAutoCompletion = nil
-		if cmd[filetype] == nil then
-			return
-		end
-		requestCompletion(bp, filetype, file, line, char)
-	elseif doAutoCompletion then
-		doAutoCompletion()
+
+	if cmd[filetype] == nil then
+		bp:InsertTab()
+		return
 	end
+
+	requestCompletion(bp, filetype, file, line, char)
 end
 
 local function getTriggerChars(filetype)
@@ -167,12 +172,9 @@ local function createBufferComplete(results)
 	return function(buf)
 		local completions = {}
 		local labels = {}
-		local offset = (completionCursor % #results) + 1
-		for idx, entry in ipairs(results) do
-			if idx >= offset then
-				completions[#completions + 1] = getEntryText(entry)
-				labels[#labels + 1] = entry.label
-			end
+		for _, entry in ipairs(results) do
+			completions[#completions + 1] = getEntryText(entry)
+			labels[#labels + 1] = entry.label
 		end
 		return completions, labels
 	end
@@ -204,7 +206,7 @@ local function showDocInSplit(bp, msg)
 	end
 end
 
-local function showCompletionDetails(bp, entry)
+showCompletionDetails = function(bp, entry)
 	local msg = getDocumentationText(entry)
 	if not msg then
 		return
@@ -221,17 +223,15 @@ local function showCompletionDetails(bp, entry)
 end
 
 local function performCompletion(bp, results)
-	local file = bp.Buf.AbsPath
 	local xy = buffer.Loc(bp.Cursor.X, bp.Cursor.Y)
 	local start = xy
-	local originalStart = start
 	if bp.Cursor:HasSelection() then
 		bp.Cursor:DeleteSelection()
 	end
 	local prefix = ""
 	local reversed = ""
 	local found = false
-	local entry = results[(completionCursor % #results) + 1]
+	local entry = results[1]
 
 	local hasRange = results[1] and results[1].textEdit and results[1].textEdit.range
 	if not hasRange then
@@ -242,11 +242,7 @@ local function performCompletion(bp, results)
 
 	deletePrefix(bp, prefix)
 	bp.Buf:Autocomplete(createBufferComplete(results))
-	local finalXy = buffer.Loc(bp.Cursor.X + #prefix, bp.Cursor.Y)
-	bp.Cursor:GotoLoc(originalStart)
-	bp.Cursor:SetSelectionStart(start)
-	bp.Cursor:SetSelectionEnd(finalXy)
-	lastCompletion = { file, finalXy.Y, finalXy.X }
+	bp.Cursor:ResetSelection()
 
 	showCompletionDetails(bp, entry)
 end
@@ -264,8 +260,6 @@ function completionActionResponse(bp, data)
 		return (left.sortText or left.label) < (right.sortText or right.label)
 	end)
 
-	doAutoCompletion = function()
-		performCompletion(bp, results)
-	end
-	doAutoCompletion()
+	currentResults = results
+	performCompletion(bp, results)
 end
