@@ -1,5 +1,10 @@
 # Micro Plugin LSP Client
 
+Based on [AndCake/micro-plugin-lsp](https://github.com/AndCake/micro-plugin-lsp)
+by Robert Kunze (MIT); this fork continues its development with rendering via
+the [micro/overlay](https://github.com/micro-editor/micro/pull/3733) API and a
+Helix/Neovim-style LSP UX.
+
 **Please note:** This software is very much not finished. It is more like a
 proof of concept and might break if you call it names.
 
