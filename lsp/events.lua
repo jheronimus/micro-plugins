@@ -520,27 +520,37 @@ local function drawPaneDiagnostics(bp)
 	end
 	local view = bp:GetView()
 	local byLine = firstDiagPerLine(diags)
-	-- the cursor line is skipped: painting an opaque suffix there clashes
-	-- with micro's cursor-line highlight; the full message for the line the
-	-- cursor sits on is shown in the info bar instead (onAnyEvent)
-	local cursorLine = bp.Buf:GetActiveCursor().Y
+	local cursorLine = -1
+	if bp == micro.CurPane() then
+		cursorLine = bp.Buf:GetActiveCursor().Y
+	end
 	for line, diag in pairs(byLine) do
-		if line ~= cursorLine then
-			drawDiagSuffix(bp, line, diag, view)
-		end
+		drawDiagSuffix(bp, line, diag, view, line == cursorLine)
 	end
 end
 
-function drawDiagSuffix(bp, line, diag, view)
+-- onCursorLine is rendered with the cursor-line background (via
+-- overlay.StyleWithBackground) so the suffix blends with micro's
+-- cursor-line highlight instead of painting an opaque band over it
+function drawDiagSuffix(bp, line, diag, view, onCursorLine)
 	local lineLen = util.CharacterCountInString(util.String(bp.Buf:LineBytes(line)))
 	local endPos = overlay.BufPaneScreenLoc(bp, buffer.Loc(lineLen, line))
-	if endPos.Y >= view.Y and endPos.Y < view.Y + view.Height then
-		local msg = diag.message
-		if #msg > 60 then
-			msg = msg:sub(1, 57) .. "..."
-		end
-		overlay.DrawText("  // " .. msg, endPos.X, endPos.Y, 80, 1, diagStyle(diag.severity))
+	if endPos.Y < view.Y or endPos.Y >= view.Y + view.Height then
+		return
 	end
+	local msg = diag.message
+	if #msg > 60 then
+		msg = msg:sub(1, 57) .. "..."
+	end
+	local style = diagStyle(diag.severity)
+	if onCursorLine then
+		if overlay.StyleWithBackground == nil then
+			return -- editor without style composition: skip rather than
+			-- paint an opaque band over the cursor-line highlight
+		end
+		style = overlay.StyleWithBackground(style, "cursor-line")
+	end
+	overlay.DrawText("  // " .. msg, endPos.X, endPos.Y, 80, 1, style)
 end
 
 function drawInlineDiagnostics()
