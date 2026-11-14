@@ -3,7 +3,8 @@ local util = import("micro/util")
 local buffer = import("micro/buffer")
 local fmt = import("fmt")
 
-local lastCompletion = {}
+-- currentResults/completionStart/lastSelectedEntry are shared with
+-- events.lua (onAnyEvent reads lastSelectedEntry) and overlaybox callbacks.
 local currentResults = nil
 local completionStart = nil
 lastSelectedEntry = nil
@@ -38,11 +39,8 @@ local function shouldIndent(bp, char, line)
 end
 
 local function requestCompletion(bp, filetype, file, line, char)
-	if flushDocumentChange ~= nil then
-		flushDocumentChange(bp, filetype)
-	end
+	flushDocumentChange(bp, filetype)
 	local send = withSend(filetype)
-	lastCompletion = { file, line, char }
 	currentAction[filetype] = { method = "textDocument/completion", response = completionActionResponse }
 	send(
 		currentAction[filetype].method,
@@ -206,15 +204,15 @@ local function replaceInserted(bp, entry)
 	insertCompletion(bp, completionStart, getEntryText(entry))
 end
 
-local function docLine(entry)
-	if entry.documentation == nil then
+local function docExcerpt(entry, count)
+	if entry == nil or entry.documentation == nil then
 		return nil
 	end
 	local doc = entry.documentation.value or entry.documentation
 	if type(doc) ~= "string" or doc == "" then
 		return nil
 	end
-	return table.concat(firstLines(renderMarkdown(doc, 60), 2), "  ·  ")
+	return table.concat(firstLines(renderMarkdown(doc, 60), count), "  ·  ")
 end
 
 function showCompletionDetails(entry)
@@ -222,7 +220,7 @@ function showCompletionDetails(entry)
 		return
 	end
 	local text = entry.detail or ""
-	local excerpt = docLine(entry)
+	local excerpt = docExcerpt(entry, 2)
 	if excerpt ~= nil and excerpt ~= "" then
 		text = text .. (text ~= "" and "  —  " or "") .. excerpt
 	end
@@ -262,6 +260,10 @@ local function startCompletion(bp, results)
 		start = resolveRangeWithEdit(bp, xy, entry, reversed, found)
 	end
 	entry = results[1]
+	if entry == nil then
+		-- every candidate was filtered out by the prefix match
+		return
+	end
 
 	local text = getEntryText(entry)
 	insertCompletion(bp, start, text)
@@ -331,19 +333,8 @@ function firstLines(entries, count)
 	return parts
 end
 
-local function docExcerpt(entry)
-	if entry == nil or entry.documentation == nil then
-		return nil
-	end
-	local doc = entry.documentation.value or entry.documentation
-	if type(doc) ~= "string" or doc == "" then
-		return nil
-	end
-	return table.concat(firstLines(renderMarkdown(doc, 60), 3), "  ·  ")
-end
-
 function resolveActionResponse(bp, data)
-	local excerpt = data.result and docExcerpt(data.result)
+	local excerpt = data.result and docExcerpt(data.result, 3)
 	if excerpt ~= nil and excerpt ~= "" then
 		micro.InfoBar():Message(excerpt)
 	end

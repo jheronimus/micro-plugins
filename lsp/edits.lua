@@ -28,7 +28,7 @@ local function countNewlines(str)
 	return count
 end
 
-local function applySingleEdit(pane, edit)
+function applySingleEdit(pane, edit)
 	local rStart = buffer.Loc(edit.range.start.character, edit.range.start.line)
 	local rEnd = buffer.Loc(edit.range["end"].character, edit.range["end"].line)
 	pane.Cursor:GotoLoc(rStart)

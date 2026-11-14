@@ -10,7 +10,9 @@ VERSION = "0.1.0"
 --   overlaybox.show(opts)  opts = { anchor = "top-right"|"cursor"|"center",
 --       title, lines = {...} or content = "text", width, maxHeight,
 --       border = true, autoclose = true, activeItem = nil|0,
---       onAccept = fn(idx), onSelect = fn(idx), onClose = fn() }
+--       onAccept = fn(idx), onSelect = fn(idx), onClose = fn()
+--       (idx in activeItem/onAccept/onSelect is a 0-based index into the
+--       caller's lines, not the wrapped display lines)
 --   overlaybox.hide()
 --   overlaybox.isActive()
 --   overlaybox.cycle(delta)   -- move active item (Tab handlers etc.)
@@ -41,6 +43,12 @@ local config = import("micro/config")
 
 local handle = nil
 local box = nil
+
+-- box geometry and interaction constants
+local WIDTH_PADDING = 4 -- border (2) + text padding (2), added to content width
+local MIN_WIDTH = 10
+local SCROLL_STEP = 3 -- mouse wheel lines
+local PAGE_STEP = 5 -- PageUp/PageDown lines
 
 local function runeLen(s)
 	local _, count = s:gsub("[^\128-\191]", "")
@@ -105,13 +113,13 @@ local function computeWidth()
 				w = runeLen(l)
 			end
 		end
-		w = w + 4
+		w = w + WIDTH_PADDING
 	end
 	if w > sw - 2 then
 		w = sw - 2
 	end
-	if w < 10 then
-		w = 10
+	if w < MIN_WIDTH then
+		w = MIN_WIDTH
 	end
 	return w
 end
@@ -132,23 +140,38 @@ local function computeHeight(sh)
 	return contentH
 end
 
-local function layout()
-	local sw, sh = screenSize()
-	box.w = computeWidth()
-	box.innerW = box.border and box.w - 2 or box.w
+-- wrap box.source to the given inner width
+local function wrapSource(innerW)
 	box.wrapped = {}
-	for _, l in ipairs(box.source) do
+	box.firstWrapped = {}
+	for si, l in ipairs(box.source) do
 		local entry = (type(l) == "table") and l or { text = tostring(l) }
-		for _, wl in ipairs(wrapLine(entry.text or "", box.innerW)) do
+		for _, wl in ipairs(wrapLine(entry.text or "", innerW)) do
 			box.wrapped[#box.wrapped + 1] = {
 				text = wl,
 				bold = entry.bold,
 				italic = entry.italic,
 				color = entry.color,
+				srcIndex = si,
 			}
+		end
+		if box.firstWrapped[si] == nil then
+			box.firstWrapped[si] = #box.wrapped
 		end
 	end
 	box.totalLines = #box.wrapped
+end
+
+-- layout is cached across frames: re-wrapping only happens when the width
+-- changes (e.g. terminal resize)
+local function layout()
+	local sw, sh = screenSize()
+	box.w = computeWidth()
+	local innerW = box.border and box.w - 2 or box.w
+	if box.wrapped == nil or box.innerW ~= innerW then
+		box.innerW = innerW
+		wrapSource(innerW)
+	end
 	box.h = computeHeight(sh)
 	box.innerH = box.border and box.h - 2 or box.h
 end
@@ -180,11 +203,12 @@ local function position()
 end
 
 local function clampScroll()
-	if box.activeItem ~= nil and box.innerH > 0 then
-		if box.activeItem < box.scrollY then
-			box.scrollY = box.activeItem
-		elseif box.activeItem >= box.scrollY + box.innerH then
-			box.scrollY = box.activeItem - box.innerH + 1
+	if box.activeItem ~= nil and box.innerH > 0 and box.firstWrapped[box.activeItem + 1] ~= nil then
+		local itemTop = box.firstWrapped[box.activeItem + 1] - 1
+		if itemTop < box.scrollY then
+			box.scrollY = itemTop
+		elseif itemTop >= box.scrollY + box.innerH then
+			box.scrollY = itemTop - box.innerH + 1
 		end
 	end
 	local maxScroll = math.max(box.totalLines - box.innerH, 0)
@@ -241,7 +265,9 @@ local function drawContent()
 		end
 		local entry = box.wrapped[idx]
 		local style = styleForEntry(entry)
-		if box.activeItem ~= nil and idx - 1 == box.activeItem then
+		-- activeItem is a source-item index; every wrapped line belonging
+		-- to that item is highlighted
+		if box.activeItem ~= nil and entry.srcIndex - 1 == box.activeItem then
 			style = style:Reverse(true)
 		end
 		overlay.DrawText(entry.text, startX, startY + i, box.innerW, 1, style)
@@ -300,6 +326,7 @@ function show(opts)
 			box.source[#box.source + 1] = seg
 		end
 	end
+	box.srcCount = #box.source
 end
 
 function hide()
@@ -315,11 +342,13 @@ function isActive()
 	return box ~= nil
 end
 
+-- cycle/accept/onSelect/onAccept all deal in source-item indices (0-based),
+-- matching what callers pass in opts.activeItem — not wrapped-line indices.
 function cycle(delta)
-	if box == nil or box.activeItem == nil or box.totalLines == 0 then
+	if box == nil or box.activeItem == nil or box.srcCount == 0 then
 		return
 	end
-	box.activeItem = (box.activeItem + delta) % box.totalLines
+	box.activeItem = (box.activeItem + delta) % box.srcCount
 	if box.onSelect ~= nil then
 		box.onSelect(box.activeItem)
 	end
@@ -379,14 +408,6 @@ function preCursorDown()
 	end
 end
 
-function preBacktab()
-	if box == nil or box.activeItem == nil then
-		return
-	end
-	cycle(-1)
-	return false
-end
-
 function preInsertNewline()
 	if box == nil then
 		return
@@ -430,7 +451,7 @@ function prePageUp()
 	if box == nil then
 		return
 	end
-	scroll(-5)
+	scroll(-PAGE_STEP)
 	return false
 end
 
@@ -438,23 +459,24 @@ function prePageDown()
 	if box == nil then
 		return
 	end
-	scroll(5)
+	scroll(PAGE_STEP)
 	return false
 end
 
-function preScrollUp(bp, te)
+-- mouse-event hooks receive the tcell event as their single argument
+function preScrollUp(te)
 	if box == nil or not mouseInside(te) then
 		return
 	end
-	scroll(-3)
+	scroll(-SCROLL_STEP)
 	return false
 end
 
-function preScrollDown(bp, te)
+function preScrollDown(te)
 	if box == nil or not mouseInside(te) then
 		return
 	end
-	scroll(3)
+	scroll(SCROLL_STEP)
 	return false
 end
 

@@ -20,9 +20,7 @@ function init()
 	-- register all configuration options
 	config.RegisterCommonOption("lsp", "server", "")
 	config.RegisterCommonOption("lsp", "formatOnSave", false)
-	config.RegisterCommonOption("lsp", "autocompleteDetails", false)
 	config.RegisterCommonOption("lsp", "ignoreMessages", "")
-	config.RegisterCommonOption("lsp", "tabcompletion", true)
 	config.RegisterCommonOption("lsp", "ignoreTriggerCharacters", "")
 	config.RegisterCommonOption("lsp", "inlineDiagnostics", true)
 
@@ -40,7 +38,6 @@ function init()
 	if overlayOk then
 		overlay.CreateOverlay(drawInlineDiagnostics)
 	end
-	micro.Log("lsp init: overlaybox visible=", overlaybox ~= nil, " overlayOk=", overlayOk)
 end
 
 function parseOptions(inputstr)

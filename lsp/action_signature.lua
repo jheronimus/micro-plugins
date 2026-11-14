@@ -93,9 +93,7 @@ function signatureAction(bp)
 		return
 	end
 
-	if flushDocumentChange ~= nil then
-		flushDocumentChange(bp, filetype)
-	end
+	flushDocumentChange(bp, filetype)
 
 	local send = withSend(filetype)
 	local file = bp.Buf.AbsPath

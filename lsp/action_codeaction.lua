@@ -1,36 +1,23 @@
 local micro = import("micro")
 local fmt = import("fmt")
 local util = import("micro/util")
-local buffer = import("micro/buffer")
-
-local function escapeJsonStr(s)
-	if not s then
-		return ""
-	end
-	return s:gsub("\\", "\\\\"):gsub('"', '\\"'):gsub("\n", "\\n"):gsub("\r", "\\r"):gsub("\t", "\\t")
-end
 
 local function serializeDiagnostic(d)
-	local sLine = d.range.start.line
-	local sChar = d.range.start.character
-	local eLine = d.range["end"].line
-	local eChar = d.range["end"].character
-	local msg = escapeJsonStr(d.message or "")
 	local codePart = ""
 	if d.code ~= nil then
-		codePart = fmt.Sprintf(', "code": "%s"', escapeJsonStr(tostring(d.code)))
+		codePart = fmt.Sprintf(', "code": %s', encodeJson(tostring(d.code)))
 	end
 	local sourcePart = ""
 	if d.source ~= nil then
-		sourcePart = fmt.Sprintf(', "source": "%s"', escapeJsonStr(tostring(d.source)))
+		sourcePart = fmt.Sprintf(', "source": %s', encodeJson(tostring(d.source)))
 	end
 	return fmt.Sprintf(
-		'{"range": {"start": {"line": %.0f, "character": %.0f}, "end": {"line": %.0f, "character": %.0f}}, "message": "%s"%s%s}',
-		sLine,
-		sChar,
-		eLine,
-		eChar,
-		msg,
+		'{"range": {"start": {"line": %.0f, "character": %.0f}, "end": {"line": %.0f, "character": %.0f}}, "message": %s%s%s}',
+		d.range.start.line,
+		d.range.start.character,
+		d.range["end"].line,
+		d.range["end"].character,
+		encodeJson(d.message or ""),
 		codePart,
 		sourcePart
 	)

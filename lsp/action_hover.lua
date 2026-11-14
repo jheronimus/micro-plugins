@@ -1,28 +1,15 @@
 local micro = import("micro")
 local fmt = import("fmt")
 
+-- Hover popup geometry: overlaybox word-wraps content to its inner width,
+-- so paragraphs are pushed as single entries; HOVER_TEXT_WIDTH is that
+-- inner width, +4 converts it to the overlaybox outer width.
+local HOVER_TEXT_WIDTH = 72
+local HOVER_MAX_HEIGHT = 28
+
 -- Renders gopls hover markdown into styled line entries for overlaybox:
 -- headings bold, code blocks dimmed, links flattened to their label,
--- reference link definitions dropped, paragraphs re-wrapped.
-local function wrapWords(words, limit)
-	local lines = {}
-	local cur = ""
-	for _, w in ipairs(words) do
-		if cur == "" then
-			cur = w
-		elseif #cur + 1 + #w <= limit then
-			cur = cur .. " " .. w
-		else
-			table.insert(lines, cur)
-			cur = w
-		end
-	end
-	if cur ~= "" then
-		table.insert(lines, cur)
-	end
-	return lines
-end
-
+-- reference link definitions dropped.
 local function flattenInline(s)
 	-- [text][ref] and [text](url) -> text
 	s = s:gsub("%[([^%]]*)%]%[[^%]]*%]", "%1")
@@ -67,9 +54,7 @@ function renderMarkdown(text, width)
 		if #para == 0 then
 			return
 		end
-		for _, l in ipairs(wrapWords(para, width)) do
-			entries[#entries + 1] = l
-		end
+		entries[#entries + 1] = table.concat(para, " ")
 		para = {}
 	end
 
@@ -133,11 +118,11 @@ function hoverActionResponse(bp, data)
 			overlaybox.show({
 				anchor = "top-right",
 				title = "Documentation",
-				lines = renderMarkdown(msg, 72),
+				lines = renderMarkdown(msg, HOVER_TEXT_WIDTH),
 				border = true,
 				autoclose = true,
-				width = 76,
-				maxHeight = 28,
+				width = HOVER_TEXT_WIDTH + 4,
+				maxHeight = HOVER_MAX_HEIGHT,
 			})
 		else
 			micro.InfoBar():Message(msg)

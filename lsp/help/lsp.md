@@ -1,21 +1,43 @@
 # Micro Plugin LSP Client
 
-LSP is a Language Server Protocol client. Features include function signatures
-and jump to definition.
+LSP is a Language Server Protocol client. Features include completion,
+hover documentation, signatures, code actions, jump to definition, rename,
+formatting, and inline diagnostics.
 
 This help page can be viewed in Micro editor with Ctrl-E 'help lsp'
 
 ## Features and Shortcuts
 
-- Show function signature on status bar (alt-K) (textDocument/hover)
+- Completion with an selectable candidate popup (ctrl-space or automatic on
+  trigger characters) (textDocument/completion); the selected candidate's
+  detail is shown in the status bar, its documentation is fetched lazily via
+  completionItem/resolve
+- Hover documentation in a popup window (alt-K) (textDocument/hover)
 - Open function definition in a new tab (alt-D) (textDocument/definition)
-- Format document (alt-F) (textDocument/formatting)
+- Code actions for the cursor line or selection (alt-a) (textDocument/codeAction)
+- Signature help in a popup (textDocument/signatureHelp, automatic on trigger
+  characters)
 - Show references to the current symbol in a buffer (alt-R)
   (textDocument/references), pressing return on the reference line, the
   reference's location is opened in a new tab
 - Rename symbol across files (F6 or `> rename <newname>`) (textDocument/rename)
+- Format document (`> format`) (textDocument/formatting), or automatically on
+  save with "lsp.formatOnSave": true
+- Diagnostics are shown in the gutter and as inline suffixes at the end of the
+  line (disable with "lsp.inlineDiagnostics": false); the message for the
+  cursor line is shown in the status bar
 
-There is initial support for completion (ctrl-space) (textDocument/completion).
+Popups (completion, hover, code actions, signatures) are rendered with the
+overlaybox plugin; on editors without the micro/overlay API the plugin falls
+back to the status bar.
+
+## Options
+
+- "lsp.server": filetype=server mappings, e.g. "go=gopls,python=pylsp"
+- "lsp.formatOnSave": format the document on save (default false)
+- "lsp.ignoreMessages": pipe-separated message prefixes to hide
+- "lsp.ignoreTriggerCharacters": comma-separated trigger characters to ignore
+- "lsp.inlineDiagnostics": draw inline diagnostic suffixes (default true)
 
 ## Supported languages
 
@@ -102,11 +124,8 @@ func main() {
 }
 ```
 
-Move cursor over Println and press alt-k. The function signature is shown on the
-bottom of the screen, in Micro status bar. It shows you what parameters the
-function can take. The signature should look similar to this: "func
-fmt.Println(a ...interface{}) (n int, err error)Println formats using the
-default formats..."
+Move cursor over Println and press alt-k. A documentation popup opens showing
+what parameters the function can take and how it formats its output.
 
 Can you see the function signature with alt-k? If you can, you have succesfully
 installed Micro LSP plugin and GoPLS language server.

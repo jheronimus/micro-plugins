@@ -64,6 +64,8 @@ globals:
     any: true
   sortEdits:
     any: true
+  applySingleEdit:
+    any: true
   applyEditsToBuffer:
     any: true
   collectChanges:
@@ -82,19 +84,9 @@ globals:
     any: true
   onRune:
     any: true
-  rangeStart:
-    any: true
-  rangeEnd:
-    any: true
   buf:
     any: true
   msg:
-    any: true
-  lastCompletion:
-    any: true
-  completionCursor:
-    any: true
-  tabCount:
     any: true
   found:
     any: true
@@ -109,6 +101,4 @@ globals:
   normalizeUri:
     any: true
   init:
-    any: true
-  transformMarkdownLine:
     any: true

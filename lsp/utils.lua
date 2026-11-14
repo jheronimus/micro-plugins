@@ -1,5 +1,4 @@
 local fmt = import("fmt")
-local micro = import("micro")
 
 function getUriFromBuf(buf)
 	if buf == nil then
@@ -42,23 +41,6 @@ end
 
 function string.ends(String, End)
 	return string.sub(String, #String - (#End - 1), #String) == End
-end
-
-function string.random(CharSet, Length, prefix)
-	local _CharSet = CharSet or "."
-
-	if _CharSet == "" then
-		return ""
-	else
-		local Result = prefix or ""
-		math.randomseed(os.time())
-		for _ = 1, Length do
-			local char = math.random(1, #CharSet)
-			Result = Result .. CharSet:sub(char, char)
-		end
-
-		return Result
-	end
 end
 
 -- Minimal JSON encoder for values produced by json.parse (tables,

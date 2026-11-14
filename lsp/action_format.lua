@@ -31,35 +31,14 @@ function formatActionResponse(callback)
 			return
 		end
 		local edits = data.result
-		-- make sure we apply the changes from back to front
-		-- this allows for changes to not need position updates
-		table.sort(edits, function(left, right)
-			-- go by lines first
-			return left.range["end"].line > right.range["end"].line
-				-- if lines match, go by end character
-				or left.range["end"].line == right.range["end"].line and left.range["end"].character > right.range["end"].character
-				-- if they match too, go by start character
-				or left.range["end"].line == right.range["end"].line
-					and left.range["end"].character == right.range["end"].character
-					and left.range.start.line == left.range["end"].line
-					and left.range.start.character > right.range.start.character
-		end)
+		-- sortEdits orders changes back-to-front so applying them in order
+		-- never invalidates the positions of the remaining edits
+		sortEdits(edits)
 
 		-- save original cursor position
 		local xy = buffer.Loc(bp.Cursor.X, bp.Cursor.Y)
 		for _idx, edit in ipairs(edits) do
-			rangeStart = buffer.Loc(edit.range.start.character, edit.range.start.line)
-			rangeEnd = buffer.Loc(edit.range["end"].character, edit.range["end"].line)
-			-- apply each change
-			bp.Cursor:GotoLoc(rangeStart)
-			bp.Cursor:SetSelectionStart(rangeStart)
-			bp.Cursor:SetSelectionEnd(rangeEnd)
-			bp.Cursor:DeleteSelection()
-			bp.Cursor:ResetSelection()
-
-			if edit.newText ~= "" then
-				bp.Buf:insert(rangeStart, edit.newText)
-			end
+			applySingleEdit(bp, edit)
 		end
 		-- put the cursor back where it was
 		bp.Cursor:GotoLoc(xy)

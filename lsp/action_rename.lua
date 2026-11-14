@@ -26,11 +26,11 @@ local function sendRename(bp, newName)
 	send(
 		currentAction[filetype].method,
 		fmt.Sprintf(
-			'{"textDocument": {"uri": "file://%s"}, "position": {"line": %.0f, "character": %.0f}, "newName": "%s"}',
+			'{"textDocument": {"uri": "file://%s"}, "position": {"line": %.0f, "character": %.0f}, "newName": %s}',
 			file,
 			line,
 			char,
-			newName
+			encodeJson(newName)
 		)
 	)
 end

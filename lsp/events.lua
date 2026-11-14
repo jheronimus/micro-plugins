@@ -21,12 +21,9 @@ function getDiagnosticsForRange(uri, startLine, endLine)
 	return matched
 end
 
-local function sendDocumentChange(bp, filetype, r)
+local function sendDocumentChange(bp, filetype)
 	local send = withSend(filetype)
 	local uri = getUriFromBuf(bp.Buf)
-	if r ~= nil then
-		lastCompletion = {}
-	end
 	-- allow the document contents to be escaped properly for the JSON string
 	local content = util.String(bp.Buf:Bytes())
 		:gsub("\\", "\\\\")
@@ -90,7 +87,7 @@ local function scheduleDocumentChange(bp, filetype)
 	micro.After(150, function()
 		changePending[filetype] = nil
 		if cmd[filetype] ~= nil and bp ~= nil and bp.Buf ~= nil then
-			sendDocumentChange(bp, filetype, nil)
+			sendDocumentChange(bp, filetype)
 		end
 	end)
 end
@@ -100,7 +97,7 @@ end
 function flushDocumentChange(bp, filetype)
 	changePending[filetype] = nil
 	if cmd[filetype] ~= nil and bp ~= nil and bp.Buf ~= nil then
-		sendDocumentChange(bp, filetype, nil)
+		sendDocumentChange(bp, filetype)
 	end
 end
 
@@ -229,7 +226,7 @@ function preSave(bp)
 		-- the up-to-date text rather than waiting for the debounce
 		local filetype = bp.Buf:FileType()
 		if cmd[filetype] ~= nil then
-			sendDocumentChange(bp, filetype, nil)
+			sendDocumentChange(bp, filetype)
 		end
 		formatAction(bp, function()
 			bp:Save()
@@ -243,7 +240,7 @@ function onSave(bp)
 		return
 	end
 
-	sendDocumentChange(bp, filetype, nil)
+	sendDocumentChange(bp, filetype)
 
 	local send = withSend(filetype)
 	local uri = getUriFromBuf(bp.Buf)
@@ -264,7 +261,7 @@ end
 
 local function handleWorkspaceConfig(filetype, data)
 	local res = fmt.Sprintf('{"jsonrpc": "2.0", "id": %.0f, "result": [{"enable": true}]}', data.id)
-	shell.JobSend(cmd[filetype], fmt.Sprintf("Content-Length: %.0f\n\n%s", #res, res))
+	shell.JobSend(cmd[filetype], fmt.Sprintf("Content-Length: %.0f\r\n\r\n%s", #res, res))
 end
 
 local function applyDiagnosticMessage(bp, diagnostic)
@@ -478,6 +475,8 @@ end
 -- no line transforms involved). For each visible buffer pane with
 -- diagnostics, the highest-severity message per line is appended after
 -- the end of that line, colored by severity.
+local DIAG_MSG_MAX = 60
+
 local function diagStyle(severity)
 	local color = (severity == 1) and "red" or "yellow"
 	local ok, style = pcall(overlay.StringToStyle, color)
@@ -542,8 +541,8 @@ function drawDiagSuffix(bp, line, diag, view, onCursorLine)
 		return
 	end
 	local msg = diag.message
-	if #msg > 60 then
-		msg = msg:sub(1, 57) .. "..."
+	if #msg > DIAG_MSG_MAX then
+		msg = msg:sub(1, DIAG_MSG_MAX - 3) .. "..."
 	end
 	-- width must match the text exactly: DrawText fills its whole width
 	-- with the style background, and an oversized fill would paint a band
@@ -556,7 +555,7 @@ function drawDiagSuffix(bp, line, diag, view, onCursorLine)
 		local fg, bg = overlay.GetColor("cursor-line"):Decompose()
 		style = style:Background((fg ~= 0) and fg or bg)
 	end
-	overlay.DrawText("  // " .. msg, endPos.X, endPos.Y, 80, 1, style)
+	overlay.DrawText(text, endPos.X, endPos.Y, width, 1, style)
 end
 
 function drawInlineDiagnostics()
@@ -580,6 +579,10 @@ end
 -- the active line is what Helix/Neovim surface on the cursor line).
 local lastDiagLine = nil
 local lastDiagPath = nil
+-- lastShownEntry/lastSelectedEntry are cross-file state shared with
+-- action_completion.lua: the completion menu updates lastSelectedEntry as
+-- the user cycles, and onAnyEvent below surfaces its detail when it
+-- changes.
 lastShownEntry = nil
 
 local function diagMessage(path, line)
@@ -592,13 +595,6 @@ local function diagMessage(path, line)
 		return nil
 	end
 	return (diag.severity == 1 and "error: " or "warning: ") .. diag.message
-end
-
-local function showSelectedCompletionDoc()
-	if lastSelectedEntry ~= nil and lastShownEntry ~= lastSelectedEntry then
-		lastShownEntry = lastSelectedEntry
-		showCompletionDetails(lastSelectedEntry)
-	end
 end
 
 local function currentBufferCursor()

@@ -41,9 +41,7 @@ function definitionActionResponse(bp, data)
 		return
 	end
 	local uri = (results[1].uri or results[1].targetUri)
-	local doc = uri:gsub("^file://", ""):gsub("%%[a-f0-9][a-f0-9]", function(x)
-		return string.char(tonumber(x:gsub("%%", ""), 16))
-	end)
+	local doc = normalizeUri(uri)
 	local buf = bp.Buf
 	if file ~= doc then
 		-- it's from a different file, so open it as a new tab
