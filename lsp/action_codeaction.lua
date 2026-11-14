@@ -55,28 +55,30 @@ local function applyCodeAction(bp, action)
 	micro.InfoBar():Message("Code action has no direct edits: " .. (action.title or ""))
 end
 
-local function buildPromptText(results)
-	local parts = {}
-	for idx, act in ipairs(results) do
-		local title = act.title or "Action " .. idx
-		if #title > 35 then
-			title = title:sub(1, 32) .. "..."
-		end
-		parts[#parts + 1] = string.format("[%d] %s", idx, title)
-	end
-	return table.concat(parts, "  ") .. "  Select (1-" .. #results .. "): "
-end
-
-local function handleActionSelection(bp, results, resp, canceled)
-	if canceled or not resp or resp == "" then
+local function showCodeActionMenu(bp, results)
+	if overlaybox == nil then
+		micro.InfoBar():Message(results[1].title or "Code action available")
+		applyCodeAction(bp, results[1])
 		return
 	end
-	local idx = tonumber(resp)
-	if idx and results[idx] then
-		applyCodeAction(bp, results[idx])
-	else
-		micro.InfoBar():Message("Invalid selection: " .. resp)
+	local lines = {}
+	for idx, act in ipairs(results) do
+		lines[#lines + 1] = string.format("%d. %s", idx, act.title or ("Action " .. idx))
 	end
+	overlaybox.show({
+		anchor = "cursor",
+		title = "Code Actions",
+		lines = lines,
+		border = true,
+		autoclose = true,
+		activeItem = 0,
+		maxHeight = 10,
+		onAccept = function(idx)
+			if results[idx + 1] then
+				applyCodeAction(bp, results[idx + 1])
+			end
+		end,
+	})
 end
 
 local function codeActionResponse(bp, data)
@@ -91,10 +93,7 @@ local function codeActionResponse(bp, data)
 		return
 	end
 
-	local promptStr = buildPromptText(results)
-	micro.InfoBar():Prompt(promptStr, "1", "codeaction", nil, function(resp, canceled)
-		handleActionSelection(bp, results, resp, canceled)
-	end)
+	showCodeActionMenu(bp, results)
 end
 
 local function getActionRange(bp)

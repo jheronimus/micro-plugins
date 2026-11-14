@@ -30,19 +30,60 @@ local function formatSignature(sig, activeParam)
 	return label
 end
 
-local function signatureActionResponse(bp, data)
-	local res = data.result
-	if not res or not res.signatures or #res.signatures == 0 then
-		return
+local function getSigDoc(sig)
+	if not sig or not sig.documentation then
+		return nil
 	end
+	local doc = sig.documentation
+	if type(doc) == "table" and doc.value then
+		doc = doc.value
+	end
+	if type(doc) == "string" and doc ~= "" then
+		return doc
+	end
+	return nil
+end
 
+local function resolveActiveSignature(res)
+	if not res or not res.signatures or #res.signatures == 0 then
+		return nil, 0
+	end
 	local sIdx = (res.activeSignature or 0) + 1
 	local sig = res.signatures[sIdx] or res.signatures[1]
-	local activeParam = res.activeParameter or (sig and sig.activeParameter) or 0
-	local msg = formatSignature(sig, activeParam)
+	local param = res.activeParameter or 0
+	if param == 0 and sig and sig.activeParameter then
+		param = sig.activeParameter
+	end
+	return sig, param
+end
 
-	if msg ~= "" then
+local function displaySignature(msg, sig)
+	if overlaybox == nil then
 		micro.InfoBar():Message(msg)
+		return
+	end
+	local doc = getSigDoc(sig)
+	local content = msg
+	if doc then
+		content = content .. "\n\n" .. doc
+	end
+	overlaybox.show({
+		anchor = "cursor",
+		content = content,
+		border = true,
+		autoclose = true,
+		maxHeight = 8,
+	})
+end
+
+local function signatureActionResponse(bp, data)
+	local sig, activeParam = resolveActiveSignature(data.result)
+	if not sig then
+		return
+	end
+	local msg = formatSignature(sig, activeParam)
+	if msg ~= "" then
+		displaySignature(msg, sig)
 	end
 end
 

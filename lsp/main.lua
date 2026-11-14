@@ -6,12 +6,12 @@ local shell = import("micro/shell")
 local util = import("micro/util")
 local fmt = import("fmt")
 local go_os = import("os")
+local overlayOk, overlay = pcall(import, "micro/overlay")
 
 cmd = {}
 currentAction = {}
 capabilities = {}
 rootUri = ""
-splitBP = nil
 version = {}
 
 local id = {}
@@ -24,6 +24,7 @@ function init()
 	config.RegisterCommonOption("lsp", "ignoreMessages", "")
 	config.RegisterCommonOption("lsp", "tabcompletion", true)
 	config.RegisterCommonOption("lsp", "ignoreTriggerCharacters", "completion")
+	config.RegisterCommonOption("lsp", "inlineDiagnostics", true)
 
 	-- example to ignore all LSP server message starting with these strings:
 	-- "lsp.ignoreMessages": "Skipping analyzing |See https://"
@@ -33,6 +34,13 @@ function init()
 
 	-- add help documentation
 	config.AddRuntimeFile("lsp", config.RTHelp, "help/lsp.md")
+
+	-- inline diagnostics are drawn as an overlay every frame (POC for the
+	-- micro/overlay API); no-op on editors without that package
+	if overlayOk then
+		overlay.CreateOverlay(drawInlineDiagnostics)
+	end
+	micro.Log("lsp init: overlaybox visible=", overlaybox ~= nil, " overlayOk=", overlayOk)
 end
 
 function parseOptions(inputstr)

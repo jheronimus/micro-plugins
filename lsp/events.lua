@@ -4,17 +4,9 @@ local shell = import("micro/shell")
 local util = import("micro/util")
 local buffer = import("micro/buffer")
 local fmt = import("fmt")
+local overlayOk, overlay = pcall(import, "micro/overlay")
 version = version or {}
 rawDiagnostics = rawDiagnostics or {}
-pendingCompletionEdits = nil
-
-function commitPendingCompletionEdits(bp)
-	if pendingCompletionEdits and #pendingCompletionEdits > 0 then
-		local editsToApply = pendingCompletionEdits
-		pendingCompletionEdits = nil
-		applyEditsToBuffer(bp, editsToApply)
-	end
-end
 
 function getDiagnosticsForRange(uri, startLine, endLine)
 	local uriDiags = rawDiagnostics[normalizeUri(uri)] or {}
@@ -27,19 +19,6 @@ function getDiagnosticsForRange(uri, startLine, endLine)
 		end
 	end
 	return matched
-end
-
-function preRune(bp, r)
-	commitPendingCompletionEdits(bp)
-	if splitBP ~= nil then
-		pcall(function()
-			splitBP:Unsplit()
-		end)
-		splitBP = nil
-		local cur = bp.Buf:GetActiveCursor()
-		cur:Deselect(false)
-		cur:GotoLoc(buffer.Loc(cur.X + 1, cur.Y))
-	end
 end
 
 local function sendDocumentChange(bp, filetype, r)
@@ -104,12 +83,6 @@ function onRune(bp, r)
 	micro.Log("FILETYPE", filetype)
 	if cmd[filetype] == nil then
 		return
-	end
-	if splitBP ~= nil then
-		pcall(function()
-			splitBP:Unsplit()
-		end)
-		splitBP = nil
 	end
 
 	sendDocumentChange(bp, filetype, r)
@@ -205,18 +178,7 @@ function onAutocomplete(bp)
 	onRune(bp)
 end
 
-function onEscape(bp)
-	pendingCompletionEdits = nil
-	if splitBP ~= nil then
-		pcall(function()
-			splitBP:Unsplit()
-		end)
-		splitBP = nil
-	end
-end
-
 function preInsertNewline(bp)
-	commitPendingCompletionEdits(bp)
 	if bp.Buf.Path == "References found" then
 		local cur = bp.Buf:GetActiveCursor()
 		cur:SelectLine()
@@ -455,5 +417,80 @@ function onExit(filetype)
 		currentAction[filetype] = nil
 		cmd[filetype] = nil
 		micro.Log("ONEXIT", filetype, str)
+	end
+end
+
+-- Inline diagnostics drawn as an overlay (POC for the micro/overlay API;
+-- no line transforms involved). For each visible buffer pane with
+-- diagnostics, the highest-severity message per line is appended after
+-- the end of that line, colored by severity.
+local function diagStyle(severity)
+	local color = (severity == 1) and "red" or "yellow"
+	local ok, style = pcall(overlay.StringToStyle, color)
+	if not ok then
+		return overlay.Style()
+	end
+	return style
+end
+
+local function bestDiagForLine(current, d)
+	local msg = d.message or ""
+	if isIgnoredMessage(msg) then
+		return current
+	end
+	local severity = d.severity or 1
+	if current ~= nil and current.severity <= severity then
+		return current
+	end
+	return { message = msg:match("^[^\r\n]+") or msg, severity = severity }
+end
+
+local function firstDiagPerLine(diags)
+	local byLine = {}
+	for _, d in ipairs(diags) do
+		if d.range and d.range.start then
+			local line = d.range.start.line
+			byLine[line] = bestDiagForLine(byLine[line], d)
+		end
+	end
+	return byLine
+end
+
+local function drawPaneDiagnostics(bp)
+	local diags = rawDiagnostics[bp.Buf.AbsPath] or {}
+	if #diags == 0 then
+		return
+	end
+	if not config.GetGlobalOption("lsp.inlineDiagnostics") then
+		return
+	end
+	local view = bp:GetView()
+	local byLine = firstDiagPerLine(diags)
+	for line, diag in pairs(byLine) do
+		local lineLen = util.CharacterCountInString(util.String(bp.Buf:LineBytes(line)))
+		local endPos = overlay.BufPaneScreenLoc(bp, buffer.Loc(lineLen, line))
+		if endPos.Y >= view.Y and endPos.Y < view.Y + view.Height then
+			local msg = diag.message
+			if #msg > 60 then
+				msg = msg:sub(1, 57) .. "..."
+			end
+			overlay.DrawText("  // " .. msg, endPos.X, endPos.Y, 80, 1, diagStyle(diag.severity))
+		end
+	end
+end
+
+function drawInlineDiagnostics()
+	if overlay == nil or micro.CurPane() == nil then
+		return
+	end
+	local tab = micro.CurTab()
+	if tab == nil or tab.Panes == nil then
+		return
+	end
+	for i = 1, #tab.Panes do
+		local pane = tab.Panes[i]
+		if pane.Buf ~= nil and pane.Buf.AbsPath ~= nil and pane.Buf:FileType() ~= "unknown" then
+			drawPaneDiagnostics(pane)
+		end
 	end
 end

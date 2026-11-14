@@ -1,7 +1,5 @@
 local micro = import("micro")
 local fmt = import("fmt")
-local config = import("micro/config")
-local buffer = import("micro/buffer")
 
 local function wrapWords(words, limit)
 	local lines = {}
@@ -103,8 +101,8 @@ function hoverActionResponse(bp, data)
 		elseif #data.result.contents > 0 then
 			msg = data.result.contents[1].value
 		end
-		if micro.ShowOverlay then
-			micro.ShowOverlay({
+		if overlaybox ~= nil then
+			overlaybox.show({
 				anchor = "top-right",
 				title = "Documentation",
 				content = reflowDoc(msg, 72),
@@ -113,18 +111,6 @@ function hoverActionResponse(bp, data)
 				width = 76,
 				maxHeight = 28,
 			})
-		elseif config.GetGlobalOption("lsp.autocompleteDetails") and #mysplit(msg, "\n") > 1 then
-			if not splitBP then
-				local tmpName = ("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"):random(32)
-				local logBuf = buffer.NewBuffer(msg, tmpName)
-				splitBP = bp:HSplitBuf(logBuf)
-				bp:NextSplit()
-			else
-				splitBP:SelectAll()
-				splitBP.Cursor:DeleteSelection()
-				splitBP.Cursor:ResetSelection()
-				splitBP.Buf:insert(buffer.Loc(1, 1), msg)
-			end
 		else
 			micro.InfoBar():Message(msg)
 		end

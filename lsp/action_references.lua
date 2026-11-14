@@ -49,5 +49,5 @@ function referencesActionResponse(bp, data)
 	end
 
 	local logBuf = buffer.NewBuffer(msg, "References found")
-	splitBP = bp:HSplitBuf(logBuf)
+	bp:HSplitBuf(logBuf)
 end

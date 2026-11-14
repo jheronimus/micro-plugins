@@ -1,0 +1,15 @@
+[{
+  "Name": "overlaybox",
+  "Description": "Boxed overlay widget on the micro/overlay API: borders, wrapping, scrolling, keyboard cycling",
+  "Tags": ["overlay", "ui"],
+  "Website": "https://github.com/jheronimus/micro-plugins",
+  "Versions": [
+    {
+      "Version": "0.1.0",
+      "Url": "https://github.com/jheronimus/micro-plugins/releases/download/latest/overlaybox.zip",
+      "Require": {
+        "micro": ">=2.0.17"
+      }
+    }
+  ]
+}]

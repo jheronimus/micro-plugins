@@ -191,6 +191,6 @@ end
 
 function init()
 	if micro.SetLineTransform then
-		micro.SetLineTransform(transformMarkdownLine)
+		micro.SetLineTransform("markdown", transformMarkdownLine)
 	end
 end

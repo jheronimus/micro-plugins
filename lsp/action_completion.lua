@@ -1,12 +1,11 @@
 local micro = import("micro")
-local config = import("micro/config")
 local util = import("micro/util")
 local buffer = import("micro/buffer")
 local fmt = import("fmt")
 
 local lastCompletion = {}
 local currentResults = nil
-local showCompletionDetails = nil
+local completionStart = nil
 
 local function getEntryText(entry)
 	if entry.textEdit and entry.textEdit.newText then
@@ -53,20 +52,8 @@ local function requestCompletion(bp, filetype, file, line, char)
 end
 
 function completionAction(bp)
-	if bp.Buf.HasSuggestions then
-		bp.Buf:CycleAutocomplete(true)
-		if currentResults and #currentResults > 0 then
-			local idx = bp.Buf.CurSuggestion
-			local entry = currentResults[(idx % #currentResults) + 1]
-			if entry then
-				if entry.additionalTextEdits then
-					pendingCompletionEdits = entry.additionalTextEdits
-				else
-					pendingCompletionEdits = nil
-				end
-				showCompletionDetails(bp, entry)
-			end
-		end
+	if overlaybox ~= nil and overlaybox.isActive() and currentResults ~= nil then
+		overlaybox.cycle(1)
 		return
 	end
 
@@ -173,89 +160,114 @@ local function deletePrefix(bp, prefix)
 	end
 end
 
-local function createBufferComplete(results)
-	return function(buf)
-		local completions = {}
-		local labels = {}
-		for _, entry in ipairs(results) do
-			completions[#completions + 1] = getEntryText(entry)
-			labels[#labels + 1] = entry.label
-		end
-		return completions, labels
+local function advanceLoc(loc, text)
+	local parts = {}
+	for seg in (text .. "\n"):gmatch("(.-)\n") do
+		parts[#parts + 1] = seg
 	end
+	local lineCount = #parts - 1
+	local lastLen = util.CharacterCountInString(parts[#parts])
+	if lineCount == 0 then
+		return buffer.Loc(loc.X + lastLen, loc.Y)
+	end
+	return buffer.Loc(lastLen, loc.Y + lineCount)
 end
 
-local function getDocumentationText(entry)
-	if not entry or (not entry.detail and not entry.documentation) then
-		return nil
+local function insertCompletion(bp, loc, text)
+	bp.Buf:Insert(loc, text)
+	bp.Cursor:GotoLoc(advanceLoc(loc, text))
+end
+
+local function replaceInserted(bp, entry)
+	if completionStart == nil then
+		return
+	end
+	local cur = bp.Buf:GetActiveCursor()
+	local endLoc = buffer.Loc(cur.X, cur.Y)
+	cur:SetSelectionStart(completionStart)
+	cur:SetSelectionEnd(endLoc)
+	cur:DeleteSelection()
+	cur:ResetSelection()
+	insertCompletion(bp, completionStart, getEntryText(entry))
+end
+
+local function showCompletionDetails(entry)
+	if not entry then
+		return
 	end
 	local doc = ""
 	if entry.documentation then
 		doc = entry.documentation.value or entry.documentation
 	end
-	local detail = entry.detail or ""
-	return fmt.Sprintf("%s\n\n%s", detail, doc)
-end
-
-local function showDocInSplit(bp, msg)
-	if not splitBP then
-		local tmpName = ("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"):random(32)
-		local logBuf = buffer.NewBuffer(msg, tmpName)
-		splitBP = bp:HSplitBuf(logBuf)
-		bp:NextSplit()
-	else
-		splitBP:SelectAll()
-		splitBP.Cursor:DeleteSelection()
-		splitBP.Cursor:ResetSelection()
-		splitBP.Buf:insert(buffer.Loc(1, 1), msg)
+	local text = entry.detail or doc
+	if text and text ~= "" then
+		micro.InfoBar():Message(text)
 	end
 end
 
-showCompletionDetails = function(bp, entry)
-	local msg = getDocumentationText(entry)
-	if not msg then
+local function applyEntry(bp, idx)
+	local entry = currentResults and currentResults[idx + 1]
+	if entry == nil or idx == 0 then
 		return
 	end
-	if config.GetGlobalOption("lsp.autocompleteDetails") then
-		showDocInSplit(bp, msg)
-	else
-		local doc = ""
-		if entry.documentation then
-			doc = entry.documentation.value or entry.documentation
-		end
-		micro.InfoBar():Message(entry.detail or doc)
+	replaceInserted(bp, entry)
+	if entry.additionalTextEdits then
+		applyEditsToBuffer(bp, entry.additionalTextEdits)
 	end
 end
 
-local function performCompletion(bp, results)
+local function startCompletion(bp, results)
 	local xy = buffer.Loc(bp.Cursor.X, bp.Cursor.Y)
 	local start = xy
-	if bp.Cursor:HasSelection() then
-		bp.Cursor:DeleteSelection()
-	end
-	local prefix = ""
 	local reversed = ""
 	local found = false
 	local entry = results[1]
 
-	local hasRange = results[1] and results[1].textEdit and results[1].textEdit.range
+	local hasRange = entry and entry.textEdit and entry.textEdit.range
 	if not hasRange then
+		local prefix
 		prefix, start, reversed, found, results = resolvePrefixAndRangeWithoutEdit(bp, xy, results)
+		-- findPrefixByTriggers already deleted the prefix when it matched a
+		-- trigger character; only the untriggered prefix is still in-buffer
+		if not found then
+			deletePrefix(bp, prefix)
+		end
 	else
 		start = resolveRangeWithEdit(bp, xy, entry, reversed, found)
 	end
+	entry = results[1]
 
-	deletePrefix(bp, prefix)
-	bp.Buf:Autocomplete(createBufferComplete(results))
-	bp.Cursor:ResetSelection()
-
-	if entry and entry.additionalTextEdits then
-		pendingCompletionEdits = entry.additionalTextEdits
-	else
-		pendingCompletionEdits = nil
+	local text = getEntryText(entry)
+	insertCompletion(bp, start, text)
+	completionStart = start
+	if entry.additionalTextEdits then
+		applyEditsToBuffer(bp, entry.additionalTextEdits)
 	end
 
-	showCompletionDetails(bp, entry)
+	showCompletionDetails(entry)
+	if overlaybox ~= nil and #results > 1 then
+		local labels = {}
+		for _, e in ipairs(results) do
+			labels[#labels + 1] = e.label
+		end
+		overlaybox.show({
+			anchor = "cursor",
+			lines = labels,
+			activeItem = 0,
+			onSelect = function(idx)
+				if currentResults ~= nil then
+					showCompletionDetails(currentResults[idx + 1])
+				end
+			end,
+			onAccept = function(idx)
+				applyEntry(bp, idx)
+			end,
+			onClose = function()
+				currentResults = nil
+				completionStart = nil
+			end,
+		})
+	end
 end
 
 function completionActionResponse(bp, data)
@@ -272,5 +284,8 @@ function completionActionResponse(bp, data)
 	end)
 
 	currentResults = results
-	performCompletion(bp, results)
+	if #results == 0 then
+		return
+	end
+	startCompletion(bp, results)
 end
