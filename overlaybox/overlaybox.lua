@@ -21,7 +21,21 @@ VERSION = "0.1.0"
 -- keys when autoclose is set, letting the key pass through.
 
 local micro = import("micro")
-local overlay = import("micro/overlay")
+-- micro/overlay only exists in editors carrying the overlay API (the fork
+-- or upstream PR #3733); degrade to an inert plugin on older binaries.
+-- The whole probe runs inside pcall: editors without the API may return
+-- nil or panic when touching the missing package.
+local overlayOk, overlay = pcall(function()
+	local ov = import("micro/overlay")
+	if ov == nil or ov.CreateOverlay == nil then
+		return nil
+	end
+	return ov
+end)
+if not overlayOk or overlay == nil then
+	overlayOk = false
+	overlay = nil
+end
 local buffer = import("micro/buffer")
 local config = import("micro/config")
 
@@ -445,6 +459,10 @@ function preScrollDown(bp, te)
 end
 
 function init()
+	if not overlayOk then
+		micro.Log("overlaybox: editor has no micro/overlay API, plugin disabled")
+		return
+	end
 	handle = overlay.CreateOverlay(draw)
 end
 
