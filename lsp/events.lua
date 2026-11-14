@@ -529,9 +529,12 @@ local function drawPaneDiagnostics(bp)
 	end
 end
 
--- onCursorLine is rendered with the cursor-line background (via
--- overlay.StyleWithBackground) so the suffix blends with micro's
--- cursor-line highlight instead of painting an opaque band over it
+-- onCursorLine is rendered with the cursor-line background so the suffix
+-- blends with micro's cursor-line highlight instead of painting an opaque
+-- band over it. micro themes define such highlight groups as
+-- 'color-link group "#color"' with the color in the foreground slot, so
+-- the composed background comes from Decompose()'s fg (falling back to bg
+-- for 'fg,bg' style definitions).
 function drawDiagSuffix(bp, line, diag, view, onCursorLine)
 	local lineLen = util.CharacterCountInString(util.String(bp.Buf:LineBytes(line)))
 	local endPos = overlay.BufPaneScreenLoc(bp, buffer.Loc(lineLen, line))
@@ -544,11 +547,8 @@ function drawDiagSuffix(bp, line, diag, view, onCursorLine)
 	end
 	local style = diagStyle(diag.severity)
 	if onCursorLine then
-		if overlay.StyleWithBackground == nil then
-			return -- editor without style composition: skip rather than
-			-- paint an opaque band over the cursor-line highlight
-		end
-		style = overlay.StyleWithBackground(style, "cursor-line")
+		local fg, bg = overlay.GetColor("cursor-line"):Decompose()
+		style = style:Background((fg ~= 0) and fg or bg)
 	end
 	overlay.DrawText("  // " .. msg, endPos.X, endPos.Y, 80, 1, style)
 end
