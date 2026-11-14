@@ -54,8 +54,6 @@ globals:
     any: true
   lastSelectedEntry:
     any: true
-  lastShownEntry:
-    any: true
   showCompletionDetails:
     any: true
   renderMarkdown:

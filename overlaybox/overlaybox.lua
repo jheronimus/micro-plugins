@@ -267,7 +267,7 @@ local function mouseInside(te)
 	if box == nil or box.rect == nil then
 		return false
 	end
-	local mx, my = te:GetPosition()
+	local mx, my = te:Position()
 	local r = box.rect
 	return mx >= r.x and mx < r.x + r.w and my >= r.y and my < r.y + r.h
 end

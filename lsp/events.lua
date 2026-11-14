@@ -520,16 +520,26 @@ local function drawPaneDiagnostics(bp)
 	end
 	local view = bp:GetView()
 	local byLine = firstDiagPerLine(diags)
+	-- the cursor line is skipped: painting an opaque suffix there clashes
+	-- with micro's cursor-line highlight; the full message for the line the
+	-- cursor sits on is shown in the info bar instead (onAnyEvent)
+	local cursorLine = bp.Buf:GetActiveCursor().Y
 	for line, diag in pairs(byLine) do
-		local lineLen = util.CharacterCountInString(util.String(bp.Buf:LineBytes(line)))
-		local endPos = overlay.BufPaneScreenLoc(bp, buffer.Loc(lineLen, line))
-		if endPos.Y >= view.Y and endPos.Y < view.Y + view.Height then
-			local msg = diag.message
-			if #msg > 60 then
-				msg = msg:sub(1, 57) .. "..."
-			end
-			overlay.DrawText("  // " .. msg, endPos.X, endPos.Y, 80, 1, diagStyle(diag.severity))
+		if line ~= cursorLine then
+			drawDiagSuffix(bp, line, diag, view)
 		end
+	end
+end
+
+function drawDiagSuffix(bp, line, diag, view)
+	local lineLen = util.CharacterCountInString(util.String(bp.Buf:LineBytes(line)))
+	local endPos = overlay.BufPaneScreenLoc(bp, buffer.Loc(lineLen, line))
+	if endPos.Y >= view.Y and endPos.Y < view.Y + view.Height then
+		local msg = diag.message
+		if #msg > 60 then
+			msg = msg:sub(1, 57) .. "..."
+		end
+		overlay.DrawText("  // " .. msg, endPos.X, endPos.Y, 80, 1, diagStyle(diag.severity))
 	end
 end
 
@@ -588,6 +598,7 @@ function onAnyEvent()
 	if bp == nil then
 		return
 	end
+
 	if overlaybox ~= nil and overlaybox.isActive() then
 		-- completion menu is open: surface the selected item's detail and
 		-- documentation. Messages set while an action runs are cleared by
