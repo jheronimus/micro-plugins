@@ -40,7 +40,8 @@ function hoverActionResponse(bp, data)
 				content = msg,
 				border = true,
 				autoclose = true,
-				width = 60,
+				width = 76,
+				maxHeight = 28,
 			})
 		elseif config.GetGlobalOption("lsp.autocompleteDetails") and #mysplit(msg, "\n") > 1 then
 			if not splitBP then
