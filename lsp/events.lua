@@ -545,6 +545,12 @@ function drawDiagSuffix(bp, line, diag, view, onCursorLine)
 	if #msg > 60 then
 		msg = msg:sub(1, 57) .. "..."
 	end
+	-- width must match the text exactly: DrawText fills its whole width
+	-- with the style background, and an oversized fill would paint a band
+	-- over any overlay drawn beneath (draw order between overlays is not
+	-- guaranteed)
+	local text = "  // " .. msg
+	local width = util.CharacterCountInString(text)
 	local style = diagStyle(diag.severity)
 	if onCursorLine then
 		local fg, bg = overlay.GetColor("cursor-line"):Decompose()
