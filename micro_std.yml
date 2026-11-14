@@ -48,6 +48,22 @@ globals:
     any: true
   overlaybox:
     any: true
+  encodeJson:
+    any: true
+  flushDocumentChange:
+    any: true
+  lastSelectedEntry:
+    any: true
+  lastShownEntry:
+    any: true
+  showCompletionDetails:
+    any: true
+  renderMarkdown:
+    any: true
+  requestResolve:
+    any: true
+  resolveActionResponse:
+    any: true
   sortEdits:
     any: true
   applyEditsToBuffer:

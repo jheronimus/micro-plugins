@@ -23,7 +23,7 @@ function init()
 	config.RegisterCommonOption("lsp", "autocompleteDetails", false)
 	config.RegisterCommonOption("lsp", "ignoreMessages", "")
 	config.RegisterCommonOption("lsp", "tabcompletion", true)
-	config.RegisterCommonOption("lsp", "ignoreTriggerCharacters", "completion")
+	config.RegisterCommonOption("lsp", "ignoreTriggerCharacters", "")
 	config.RegisterCommonOption("lsp", "inlineDiagnostics", true)
 
 	-- example to ignore all LSP server message starting with these strings:
@@ -126,7 +126,7 @@ local function launchServer(part, filetype, callback, targetBuf)
 	send(
 		currentAction[part[1]].method,
 		fmt.Sprintf(
-			'{"processId": %.0f, "rootUri": "%s", "workspaceFolders": [{"name": "root", "uri": "%s"}], "initializationOptions": %s, "capabilities": {"textDocument": {"hover": {"contentFormat": ["plaintext", "markdown"]}, "publishDiagnostics": {"relatedInformation": false, "versionSupport": true, "codeDescriptionSupport": true, "dataSupport": true}, "signatureHelp": {"signatureInformation": {"documentationFormat": ["plaintext", "markdown"]}}}}}',
+			'{"processId": %.0f, "rootUri": "%s", "workspaceFolders": [{"name": "root", "uri": "%s"}], "initializationOptions": %s, "capabilities": {"textDocument": {"hover": {"contentFormat": ["markdown"]}, "publishDiagnostics": {"relatedInformation": false, "versionSupport": true, "codeDescriptionSupport": true, "dataSupport": true}, "signatureHelp": {"signatureInformation": {"documentationFormat": ["plaintext", "markdown"]}}}}}',
 			go_os.Getpid(),
 			rootUri,
 			rootUri,

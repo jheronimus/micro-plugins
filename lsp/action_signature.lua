@@ -93,6 +93,10 @@ function signatureAction(bp)
 		return
 	end
 
+	if flushDocumentChange ~= nil then
+		flushDocumentChange(bp, filetype)
+	end
+
 	local send = withSend(filetype)
 	local file = bp.Buf.AbsPath
 	local line = bp.Buf:GetActiveCursor().Y

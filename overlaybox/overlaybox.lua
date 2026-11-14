@@ -124,8 +124,14 @@ local function layout()
 	box.innerW = box.border and box.w - 2 or box.w
 	box.wrapped = {}
 	for _, l in ipairs(box.source) do
-		for _, wl in ipairs(wrapLine(l, box.innerW)) do
-			box.wrapped[#box.wrapped + 1] = wl
+		local entry = (type(l) == "table") and l or { text = tostring(l) }
+		for _, wl in ipairs(wrapLine(entry.text or "", box.innerW)) do
+			box.wrapped[#box.wrapped + 1] = {
+				text = wl,
+				bold = entry.bold,
+				italic = entry.italic,
+				color = entry.color,
+			}
 		end
 	end
 	box.totalLines = #box.wrapped
@@ -196,6 +202,20 @@ local function drawTitle()
 	overlay.DrawText(" " .. box.title .. " ", r.x + 2, r.y, r.w - 4, 1, overlay.Style():Bold(true))
 end
 
+local function styleForEntry(entry)
+	local style = overlay.Style()
+	if entry.color ~= nil then
+		style = overlay.GetColor(entry.color)
+	end
+	if entry.bold then
+		style = style:Bold(true)
+	end
+	if entry.italic then
+		style = style:Italic(true)
+	end
+	return style
+end
+
 local function drawContent()
 	local r = box.rect
 	local startY = box.border and r.y + 1 or r.y
@@ -205,11 +225,12 @@ local function drawContent()
 		if idx > box.totalLines then
 			break
 		end
-		local style = overlay.Style()
+		local entry = box.wrapped[idx]
+		local style = styleForEntry(entry)
 		if box.activeItem ~= nil and idx - 1 == box.activeItem then
-			style = overlay.Style():Reverse(true)
+			style = style:Reverse(true)
 		end
-		overlay.DrawText(box.wrapped[idx], startX, startY + i, box.innerW, 1, style)
+		overlay.DrawText(entry.text, startX, startY + i, box.innerW, 1, style)
 	end
 end
 
@@ -258,7 +279,7 @@ function show(opts)
 	}
 	if opts.lines ~= nil then
 		for _, l in ipairs(opts.lines) do
-			box.source[#box.source + 1] = tostring(l)
+			box.source[#box.source + 1] = l
 		end
 	else
 		for seg in ((opts.content or "") .. "\n"):gmatch("(.-)\n") do

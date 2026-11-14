@@ -6,6 +6,7 @@ local fmt = import("fmt")
 local lastCompletion = {}
 local currentResults = nil
 local completionStart = nil
+lastSelectedEntry = nil
 
 local function getEntryText(entry)
 	if entry.textEdit and entry.textEdit.newText then
@@ -37,6 +38,9 @@ local function shouldIndent(bp, char, line)
 end
 
 local function requestCompletion(bp, filetype, file, line, char)
+	if flushDocumentChange ~= nil then
+		flushDocumentChange(bp, filetype)
+	end
 	local send = withSend(filetype)
 	lastCompletion = { file, line, char }
 	currentAction[filetype] = { method = "textDocument/completion", response = completionActionResponse }
@@ -51,27 +55,38 @@ local function requestCompletion(bp, filetype, file, line, char)
 	)
 end
 
-function completionAction(bp)
-	if overlaybox ~= nil and overlaybox.isActive() and currentResults ~= nil then
+local function isCycling(bp, auto)
+	return not auto and overlaybox ~= nil and overlaybox.isActive() and currentResults ~= nil
+end
+
+function completionAction(bp, auto)
+	local filetype = bp.Buf:FileType()
+	local cursor = bp.Buf:GetActiveCursor()
+
+	if isCycling(bp, auto) then
 		overlaybox.cycle(1)
 		return
 	end
 
-	local filetype = bp.Buf:FileType()
-	local file = bp.Buf.AbsPath
-	local line = bp.Buf:GetActiveCursor().Y
-	local char = bp.Buf:GetActiveCursor().X
-
-	if shouldIndent(bp, char, line) then
+	if auto then
+		if cmd[filetype] == nil then
+			return
+		end
+		if overlaybox ~= nil and overlaybox.isActive() then
+			overlaybox.hide()
+		end
+		requestCompletion(bp, filetype, bp.Buf.AbsPath, cursor.Y, cursor.X)
 		return
 	end
 
+	if shouldIndent(bp, cursor.X, cursor.Y) then
+		return
+	end
 	if cmd[filetype] == nil then
 		bp:InsertTab()
 		return
 	end
-
-	requestCompletion(bp, filetype, file, line, char)
+	requestCompletion(bp, filetype, bp.Buf.AbsPath, cursor.Y, cursor.X)
 end
 
 local function getTriggerChars(filetype)
@@ -191,16 +206,27 @@ local function replaceInserted(bp, entry)
 	insertCompletion(bp, completionStart, getEntryText(entry))
 end
 
-local function showCompletionDetails(entry)
+local function docLine(entry)
+	if entry.documentation == nil then
+		return nil
+	end
+	local doc = entry.documentation.value or entry.documentation
+	if type(doc) ~= "string" or doc == "" then
+		return nil
+	end
+	return table.concat(firstLines(renderMarkdown(doc, 60), 2), "  ·  ")
+end
+
+function showCompletionDetails(entry)
 	if not entry then
 		return
 	end
-	local doc = ""
-	if entry.documentation then
-		doc = entry.documentation.value or entry.documentation
+	local text = entry.detail or ""
+	local excerpt = docLine(entry)
+	if excerpt ~= nil and excerpt ~= "" then
+		text = text .. (text ~= "" and "  —  " or "") .. excerpt
 	end
-	local text = entry.detail or doc
-	if text and text ~= "" then
+	if text ~= "" then
 		micro.InfoBar():Message(text)
 	end
 end
@@ -246,28 +272,87 @@ local function startCompletion(bp, results)
 
 	showCompletionDetails(entry)
 	if overlaybox ~= nil and #results > 1 then
-		local labels = {}
-		for _, e in ipairs(results) do
-			labels[#labels + 1] = e.label
-		end
-		overlaybox.show({
-			anchor = "cursor",
-			lines = labels,
-			activeItem = 0,
-			onSelect = function(idx)
-				if currentResults ~= nil then
-					showCompletionDetails(currentResults[idx + 1])
-				end
-			end,
-			onAccept = function(idx)
-				applyEntry(bp, idx)
-			end,
-			onClose = function()
-				currentResults = nil
-				completionStart = nil
-			end,
-		})
+		showCompletionMenu(bp, bp.Buf:FileType(), results)
 	end
+end
+
+function completionLabel(e)
+	local detail = e.detail
+	if detail == nil and e.labelDetails ~= nil then
+		detail = e.labelDetails.description
+	end
+	if detail ~= nil and detail ~= "" then
+		return e.label .. "  " .. detail
+	end
+	return e.label
+end
+
+function showCompletionMenu(bp, filetype, results)
+	local labels = {}
+	for _, e in ipairs(results) do
+		labels[#labels + 1] = completionLabel(e)
+	end
+	overlaybox.show({
+		anchor = "cursor",
+		lines = labels,
+		activeItem = 0,
+		onSelect = function(idx)
+			if currentResults == nil then
+				return
+			end
+			local selected = currentResults[idx + 1]
+			lastSelectedEntry = selected
+			if selected ~= nil and selected.documentation == nil and cmd[filetype] ~= nil then
+				requestResolve(bp, filetype, selected)
+			end
+		end,
+		onAccept = function(idx)
+			applyEntry(bp, idx)
+		end,
+		onClose = function()
+			currentResults = nil
+			completionStart = nil
+			lastSelectedEntry = nil
+		end,
+	})
+end
+
+function firstLines(entries, count)
+	local parts = {}
+	for _, line in ipairs(entries) do
+		local text = (type(line) == "table") and line.text or line
+		if text ~= "" then
+			parts[#parts + 1] = text
+			if #parts >= count then
+				break
+			end
+		end
+	end
+	return parts
+end
+
+local function docExcerpt(entry)
+	if entry == nil or entry.documentation == nil then
+		return nil
+	end
+	local doc = entry.documentation.value or entry.documentation
+	if type(doc) ~= "string" or doc == "" then
+		return nil
+	end
+	return table.concat(firstLines(renderMarkdown(doc, 60), 3), "  ·  ")
+end
+
+function resolveActionResponse(bp, data)
+	local excerpt = data.result and docExcerpt(data.result)
+	if excerpt ~= nil and excerpt ~= "" then
+		micro.InfoBar():Message(excerpt)
+	end
+end
+
+function requestResolve(bp, filetype, entry)
+	local send = withSend(filetype)
+	currentAction[filetype] = { method = "completionItem/resolve", response = resolveActionResponse }
+	send(currentAction[filetype].method, encodeJson(entry))
 end
 
 function completionActionResponse(bp, data)

@@ -61,6 +61,50 @@ function string.random(CharSet, Length, prefix)
 	end
 end
 
+-- Minimal JSON encoder for values produced by json.parse (tables,
+-- strings, numbers, booleans). Used to send server objects (e.g. LSP
+-- completion items for completionItem/resolve) back to the server.
+local function encodeJsonTable(value)
+	local arrayLen, total = 0, 0
+	for _ in ipairs(value) do
+		arrayLen = arrayLen + 1
+	end
+	for _ in pairs(value) do
+		total = total + 1
+	end
+	local items = {}
+	if arrayLen == total and arrayLen > 0 then
+		for _, item in ipairs(value) do
+			items[#items + 1] = encodeJson(item)
+		end
+		return "[" .. table.concat(items, ",") .. "]"
+	end
+	for k, item in pairs(value) do
+		items[#items + 1] = encodeJson(tostring(k)) .. ":" .. encodeJson(item)
+	end
+	return "{" .. table.concat(items, ",") .. "}"
+end
+
+function encodeJson(value)
+	local vtype = type(value)
+	if vtype == "string" then
+		return fmt.Sprintf(
+			'"%s"',
+			value:gsub("\\", "\\\\"):gsub('"', '\\"'):gsub("\n", "\\n"):gsub("\r", "\\r"):gsub("\t", "\\t")
+		)
+	elseif vtype == "number" then
+		if value == math.floor(value) then
+			return fmt.Sprintf("%.0f", value)
+		end
+		return tostring(value)
+	elseif vtype == "boolean" then
+		return tostring(value)
+	elseif vtype == "table" then
+		return encodeJsonTable(value)
+	end
+	return "null"
+end
+
 function string.parse(text)
 	if not text:find('"jsonrpc":') then
 		return {}

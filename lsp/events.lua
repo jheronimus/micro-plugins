@@ -71,21 +71,47 @@ local function checkTriggerCharacters(bp, filetype, r)
 	local ignored = mysplit(config.GetGlobalOption("lsp.ignoreTriggerCharacters") or "", ",")
 	local cap = capabilities[filetype]
 	if shouldTriggerCompletion(cap, ignored, r) then
-		completionAction(bp)
+		completionAction(bp, true)
 	elseif shouldTriggerSignature(cap, ignored, r) then
 		signatureAction(bp)
+	end
+end
+
+-- didChange notifications are debounced: mark the buffer dirty and send
+-- its current text once after the editor has been idle for a moment
+-- (Neovim's debounce_text_changes default is 150ms)
+local changePending = {}
+
+local function scheduleDocumentChange(bp, filetype)
+	if changePending[filetype] then
+		return
+	end
+	changePending[filetype] = true
+	micro.After(150, function()
+		changePending[filetype] = nil
+		if cmd[filetype] ~= nil and bp ~= nil and bp.Buf ~= nil then
+			sendDocumentChange(bp, filetype, nil)
+		end
+	end)
+end
+
+-- send any pending document text right away; used before requests that
+-- must observe the current buffer (completion, signature help)
+function flushDocumentChange(bp, filetype)
+	changePending[filetype] = nil
+	if cmd[filetype] ~= nil and bp ~= nil and bp.Buf ~= nil then
+		sendDocumentChange(bp, filetype, nil)
 	end
 end
 
 -- when a new character is types, the document changes
 function onRune(bp, r)
 	local filetype = bp.Buf:FileType()
-	micro.Log("FILETYPE", filetype)
 	if cmd[filetype] == nil then
 		return
 	end
 
-	sendDocumentChange(bp, filetype, r)
+	scheduleDocumentChange(bp, filetype)
 	checkTriggerCharacters(bp, filetype, r)
 end
 
@@ -199,7 +225,12 @@ end
 
 function preSave(bp)
 	if config.GetGlobalOption("lsp.formatOnSave") then
-		onRune(bp)
+		-- send the current document immediately so the format request sees
+		-- the up-to-date text rather than waiting for the debounce
+		local filetype = bp.Buf:FileType()
+		if cmd[filetype] ~= nil then
+			sendDocumentChange(bp, filetype, nil)
+		end
 		formatAction(bp, function()
 			bp:Save()
 		end)
@@ -331,6 +362,27 @@ local function isPublishDiagnostics(method)
 	return method == "textDocument/publishDiagnostics" or method == "textDocument\\/publishDiagnostics"
 end
 
+local function isApplyEdit(method)
+	return method == "workspace/applyEdit" or method == "workspace\\/applyEdit"
+end
+
+-- server-initiated edit (e.g. from rename or organize imports); apply it
+-- and reply to the server request with its own id
+local function handleApplyEdit(filetype, data)
+	local bp = micro.CurPane()
+	if data.params == nil or data.params.edit == nil then
+		return
+	end
+	if bp ~= nil and bp.Buf ~= nil then
+		local fileEdits = collectChanges(data.params.edit)
+		applyAllChanges(bp, fileEdits, "workspace edit")
+	end
+	if cmd[filetype] ~= nil and data.id ~= nil then
+		local res = fmt.Sprintf('{"jsonrpc": "2.0", "id": %.0f, "result": {"applied": true}}', data.id)
+		shell.JobSend(cmd[filetype], fmt.Sprintf("Content-Length: %.0f\r\n\r\n%s", #res, res))
+	end
+end
+
 local function isShowMessage(method)
 	return method == "window/showMessage" or method == "window\\/showMessage"
 end
@@ -347,6 +399,8 @@ end
 local function handleLspMessage(filetype, data, rawMessage)
 	if data.method == "workspace/configuration" then
 		handleWorkspaceConfig(filetype, data)
+	elseif isApplyEdit(data.method) then
+		handleApplyEdit(filetype, data)
 	elseif isPublishDiagnostics(data.method) then
 		handlePublishDiagnostics(data)
 	elseif isCustomAction(filetype, data) then
@@ -492,5 +546,66 @@ function drawInlineDiagnostics()
 		if pane.Buf ~= nil and pane.Buf.AbsPath ~= nil and pane.Buf:FileType() ~= "unknown" then
 			drawPaneDiagnostics(pane)
 		end
+	end
+end
+
+-- Show the diagnostic for the line the cursor moved to in the info bar
+-- (the overlay suffixes skip nothing, but a full untruncated message for
+-- the active line is what Helix/Neovim surface on the cursor line).
+local lastDiagLine = nil
+local lastDiagPath = nil
+lastShownEntry = nil
+
+local function diagMessage(path, line)
+	local diags = rawDiagnostics[path]
+	if diags == nil then
+		return nil
+	end
+	local diag = firstDiagPerLine(diags)[line]
+	if diag == nil then
+		return nil
+	end
+	return (diag.severity == 1 and "error: " or "warning: ") .. diag.message
+end
+
+local function showSelectedCompletionDoc()
+	if lastSelectedEntry ~= nil and lastShownEntry ~= lastSelectedEntry then
+		lastShownEntry = lastSelectedEntry
+		showCompletionDetails(lastSelectedEntry)
+	end
+end
+
+local function currentBufferCursor()
+	local bp = micro.CurPane()
+	if bp == nil or bp.Buf == nil or bp.Buf.AbsPath == nil then
+		return nil
+	end
+	return bp, bp.Buf.AbsPath, bp.Buf:GetActiveCursor().Y
+end
+
+function onAnyEvent()
+	local bp, path, line = currentBufferCursor()
+	if bp == nil then
+		return
+	end
+	if overlaybox ~= nil and overlaybox.isActive() then
+		-- completion menu is open: surface the selected item's detail and
+		-- documentation. Messages set while an action runs are cleared by
+		-- the action pipeline; onAnyEvent runs after it, so its message
+		-- survives the draw.
+		if lastSelectedEntry ~= nil and lastShownEntry ~= lastSelectedEntry then
+			lastShownEntry = lastSelectedEntry
+			showCompletionDetails(lastSelectedEntry)
+		end
+		return
+	end
+	if line == lastDiagLine and path == lastDiagPath then
+		return
+	end
+	lastDiagLine = line
+	lastDiagPath = path
+	local msg = diagMessage(path, line)
+	if msg ~= nil then
+		micro.InfoBar():Message(msg)
 	end
 end

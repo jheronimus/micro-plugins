@@ -1,6 +1,9 @@
 local micro = import("micro")
 local fmt = import("fmt")
 
+-- Renders gopls hover markdown into styled line entries for overlaybox:
+-- headings bold, code blocks dimmed, links flattened to their label,
+-- reference link definitions dropped, paragraphs re-wrapped.
 local function wrapWords(words, limit)
 	local lines = {}
 	local cur = ""
@@ -20,23 +23,43 @@ local function wrapWords(words, limit)
 	return lines
 end
 
-local function isSpecialLine(trimmed, line)
-	if trimmed:sub(1, 1) == "#" or trimmed == "---" or trimmed == "***" then
-		return true
-	end
-	if trimmed:match("^[-*+]%s") or trimmed:match("^%d+%.%s") then
-		return true
-	end
-	return line:match("^%s%s%s%s") ~= nil or line:match("^\t") ~= nil
+local function flattenInline(s)
+	-- [text][ref] and [text](url) -> text
+	s = s:gsub("%[([^%]]*)%]%[[^%]]*%]", "%1")
+	s = s:gsub("%[([^%]]*)%]%([^%)]*%)", "%1")
+	-- **bold**, *italic*, `code` -> plain text
+	s = s:gsub("%*%*([^*]+)%*%*", "%1")
+	s = s:gsub("%*([^*]+)%*", "%1")
+	s = s:gsub("`([^`]*)`", "%1")
+	return s
 end
 
-local function reflowDoc(text, limit)
-	local lines = {}
-	for s in (text .. "\n"):gmatch("(.-)\r?\n") do
-		table.insert(lines, s)
-	end
+local function isRefDef(line)
+	return line:match("^%s*%[[^%]]*%]:%s*%S") ~= nil
+end
 
-	local out = {}
+-- classifies a non-blank, non-code line: returns "para" for plain
+-- paragraph text, "drop" for link reference definitions, or the styled
+-- entry for headings, rules, and list items
+local function classifyLine(trimmed, width)
+	if isRefDef(trimmed) then
+		return "drop", nil
+	end
+	local title = trimmed:match("^#+%s+(.*)$")
+	if title then
+		return "entry", { text = flattenInline(title), bold = true }
+	end
+	if trimmed:match("^%-%-%-+$") or trimmed:match("^%*%*%*+$") then
+		return "entry", { text = string.rep("─", width), color = "divider" }
+	end
+	if trimmed:match("^[-*+]%s") or trimmed:match("^%d+%.%s") then
+		return "entry", flattenInline(trimmed)
+	end
+	return "para", nil
+end
+
+function renderMarkdown(text, width)
+	local entries = {}
 	local para = {}
 	local inCode = false
 
@@ -44,31 +67,36 @@ local function reflowDoc(text, limit)
 		if #para == 0 then
 			return
 		end
-		local words = {}
-		for w in table.concat(para, " "):gmatch("%S+") do
-			table.insert(words, w)
-		end
-		for _, l in ipairs(wrapWords(words, limit)) do
-			table.insert(out, l)
+		for _, l in ipairs(wrapWords(para, width)) do
+			entries[#entries + 1] = l
 		end
 		para = {}
 	end
 
-	for _, line in ipairs(lines) do
+	for line in (text .. "\n"):gmatch("(.-)\r?\n") do
 		local trimmed = line:match("^%s*(.-)%s*$")
 		if trimmed:sub(1, 3) == "```" then
 			flushPara()
 			inCode = not inCode
-			table.insert(out, line)
-		elseif inCode or trimmed == "" or isSpecialLine(trimmed, line) then
+		elseif inCode then
+			entries[#entries + 1] = { text = line, color = "comment" }
+		elseif trimmed == "" then
 			flushPara()
-			table.insert(out, line)
+			entries[#entries + 1] = ""
 		else
-			table.insert(para, trimmed)
+			local kind, entry = classifyLine(trimmed, width)
+			if kind == "para" then
+				table.insert(para, flattenInline(trimmed))
+			else
+				flushPara()
+				if kind == "entry" then
+					entries[#entries + 1] = entry
+				end
+			end
 		end
 	end
 	flushPara()
-	return table.concat(out, "\n")
+	return entries
 end
 
 -- the hover action request and response
@@ -105,7 +133,7 @@ function hoverActionResponse(bp, data)
 			overlaybox.show({
 				anchor = "top-right",
 				title = "Documentation",
-				content = reflowDoc(msg, 72),
+				lines = renderMarkdown(msg, 72),
 				border = true,
 				autoclose = true,
 				width = 76,

@@ -169,6 +169,11 @@ local function parsePrefix(rawText)
 	return matchRule(rawText) or matchCheckbox(rawText) or matchHeader(rawText) or matchQuote(rawText)
 end
 
+-- results are cached per raw line text: the transform runs for every
+-- visible line on every frame, and unchanged lines re-parse needlessly
+local transformCache = {}
+local cacheCount = 0
+
 function transformMarkdownLine(_, filetype, _, isCursorLine, rawText)
 	if filetype ~= "markdown" or isCursorLine then
 		return nil
@@ -177,16 +182,29 @@ function transformMarkdownLine(_, filetype, _, isCursorLine, rawText)
 		return nil
 	end
 
-	local pfxResult = parsePrefix(rawText)
-	if pfxResult then
-		return pfxResult
+	local cached = transformCache[rawText]
+	if cached ~= nil then
+		return cached[1]
 	end
 
-	local text, spans = parseInline(rawText)
-	if #spans == 0 and text == rawText then
-		return nil
+	local result = nil
+	local pfxResult = parsePrefix(rawText)
+	if pfxResult then
+		result = pfxResult
+	else
+		local text, spans = parseInline(rawText)
+		if #spans > 0 or text ~= rawText then
+			result = { text = text, spans = spans }
+		end
 	end
-	return { text = text, spans = spans }
+
+	if cacheCount > 500 then
+		transformCache = {}
+		cacheCount = 0
+	end
+	cacheCount = cacheCount + 1
+	transformCache[rawText] = { result }
+	return result
 end
 
 function init()
