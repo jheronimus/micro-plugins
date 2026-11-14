@@ -3,6 +3,76 @@ local fmt = import("fmt")
 local config = import("micro/config")
 local buffer = import("micro/buffer")
 
+local function wrapWords(words, limit)
+	local lines = {}
+	local cur = ""
+	for _, w in ipairs(words) do
+		if cur == "" then
+			cur = w
+		elseif #cur + 1 + #w <= limit then
+			cur = cur .. " " .. w
+		else
+			table.insert(lines, cur)
+			cur = w
+		end
+	end
+	if cur ~= "" then
+		table.insert(lines, cur)
+	end
+	return lines
+end
+
+local function isSpecialLine(trimmed, line)
+	if trimmed:sub(1, 1) == "#" or trimmed == "---" or trimmed == "***" then
+		return true
+	end
+	if trimmed:match("^[-*+]%s") or trimmed:match("^%d+%.%s") then
+		return true
+	end
+	return line:match("^%s%s%s%s") ~= nil or line:match("^\t") ~= nil
+end
+
+local function reflowDoc(text, limit)
+	local lines = {}
+	for s in (text .. "\n"):gmatch("(.-)\r?\n") do
+		table.insert(lines, s)
+	end
+
+	local out = {}
+	local para = {}
+	local inCode = false
+
+	local function flushPara()
+		if #para == 0 then
+			return
+		end
+		local words = {}
+		for w in table.concat(para, " "):gmatch("%S+") do
+			table.insert(words, w)
+		end
+		for _, l in ipairs(wrapWords(words, limit)) do
+			table.insert(out, l)
+		end
+		para = {}
+	end
+
+	for _, line in ipairs(lines) do
+		local trimmed = line:match("^%s*(.-)%s*$")
+		if trimmed:sub(1, 3) == "```" then
+			flushPara()
+			inCode = not inCode
+			table.insert(out, line)
+		elseif inCode or trimmed == "" or isSpecialLine(trimmed, line) then
+			flushPara()
+			table.insert(out, line)
+		else
+			table.insert(para, trimmed)
+		end
+	end
+	flushPara()
+	return table.concat(out, "\n")
+end
+
 -- the hover action request and response
 -- the hoverActionResponse is hooked up in
 function hoverAction(bp)
@@ -37,7 +107,7 @@ function hoverActionResponse(bp, data)
 			micro.ShowOverlay({
 				anchor = "top-right",
 				title = "Documentation",
-				content = msg,
+				content = reflowDoc(msg, 72),
 				border = true,
 				autoclose = true,
 				width = 76,
