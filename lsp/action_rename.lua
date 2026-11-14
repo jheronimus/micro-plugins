@@ -1,79 +1,5 @@
 local micro = import("micro")
-local buffer = import("micro/buffer")
 local fmt = import("fmt")
-
-local function sortEdits(edits)
-	table.sort(edits, function(left, right)
-		return left.range["end"].line > right.range["end"].line
-			or left.range["end"].line == right.range["end"].line and left.range["end"].character > right.range["end"].character
-			or left.range["end"].line == right.range["end"].line
-				and left.range["end"].character == right.range["end"].character
-				and left.range.start.line == left.range["end"].line
-				and left.range.start.character > right.range.start.character
-	end)
-end
-
-local function applyEditsToBuffer(pane, edits)
-	sortEdits(edits)
-	local xy = buffer.Loc(pane.Cursor.X, pane.Cursor.Y)
-	for _, edit in ipairs(edits) do
-		local rStart = buffer.Loc(edit.range.start.character, edit.range.start.line)
-		local rEnd = buffer.Loc(edit.range["end"].character, edit.range["end"].line)
-		pane.Cursor:GotoLoc(rStart)
-		pane.Cursor:SetSelectionStart(rStart)
-		pane.Cursor:SetSelectionEnd(rEnd)
-		pane.Cursor:DeleteSelection()
-		pane.Cursor:ResetSelection()
-		if edit.newText ~= "" then
-			pane.Buf:insert(rStart, edit.newText)
-		end
-	end
-	pane.Cursor:GotoLoc(xy)
-end
-
-local function collectChanges(result)
-	local fileEdits = {}
-	if result.changes then
-		for uri, edits in pairs(result.changes) do
-			fileEdits[normalizeUri(uri)] = edits
-		end
-	elseif result.documentChanges then
-		for _, docChange in ipairs(result.documentChanges) do
-			if docChange.textDocument and docChange.edits then
-				fileEdits[normalizeUri(docChange.textDocument.uri)] = docChange.edits
-			end
-		end
-	end
-	return fileEdits
-end
-
-local function applyAllChanges(bp, fileEdits, newName)
-	local totalFiles = 0
-	local currentPath = bp.Buf.AbsPath
-
-	for path, edits in pairs(fileEdits) do
-		totalFiles = totalFiles + 1
-		if path == currentPath then
-			applyEditsToBuffer(bp, edits)
-			onRune(bp)
-		else
-			local otherBuf, err = buffer.NewBufferFromFile(path)
-			if err == nil then
-				bp:AddTab()
-				local newPane = micro.CurPane()
-				newPane:OpenBuffer(otherBuf)
-				applyEditsToBuffer(newPane, edits)
-				newPane:Save()
-			end
-		end
-	end
-
-	if totalFiles > 0 then
-		micro.InfoBar():Message("Renamed to " .. newName .. " in " .. totalFiles .. " file(s)")
-	else
-		micro.InfoBar():Message("No occurrences found to rename")
-	end
-end
 
 local function renameActionResponse(newName)
 	return function(bp, data)
@@ -82,7 +8,7 @@ local function renameActionResponse(newName)
 			return
 		end
 		local fileEdits = collectChanges(data.result)
-		applyAllChanges(bp, fileEdits, newName)
+		applyAllChanges(bp, fileEdits, "Renamed to " .. newName)
 	end
 end
 

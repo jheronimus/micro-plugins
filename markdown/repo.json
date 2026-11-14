@@ -1,0 +1,15 @@
+[{
+  "Name": "markdown",
+  "Description": "In-editor visual markdown styling and syntax concealment",
+  "Tags": ["markdown", "conceal", "formatting"],
+  "Website": "https://github.com/jheronimus/micro-plugins",
+  "Versions": [
+    {
+      "Version": "1.0.0",
+      "Url": "https://github.com/jheronimus/micro-plugins/releases/download/latest/markdown.zip",
+      "Require": {
+        "micro": ">=2.0.16"
+      }
+    }
+  ]
+}]

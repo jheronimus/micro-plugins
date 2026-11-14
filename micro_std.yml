@@ -40,6 +40,26 @@ globals:
     any: true
   renameAction:
     any: true
+  codeAction:
+    any: true
+  signatureAction:
+    any: true
+  sortEdits:
+    any: true
+  applyEditsToBuffer:
+    any: true
+  collectChanges:
+    any: true
+  applyAllChanges:
+    any: true
+  rawDiagnostics:
+    any: true
+  getDiagnosticsForRange:
+    any: true
+  pendingCompletionEdits:
+    any: true
+  commitPendingCompletionEdits:
+    any: true
   onStdout:
     any: true
   onStderr:
@@ -75,4 +95,8 @@ globals:
   version:
     any: true
   normalizeUri:
+    any: true
+  init:
+    any: true
+  transformMarkdownLine:
     any: true

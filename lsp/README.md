@@ -13,13 +13,17 @@ Currently implemented methods:
 - textDocument/completion
 - textDocument/formatting
 - textDocument/references
+- textDocument/rename
+- textDocument/codeAction
+- textDocument/signatureHelp
 
 If possible, this plugin will register the following shortcuts:
 
 - Alt-k for hover
 - Alt-d for definition lookup
-- Alt-f for formatting
 - Alt-r for looking up references
+- Alt-a for code actions / quick-fix
+- F6 for rename symbol
 - Ctrl-space for completion
 
 ## Installation

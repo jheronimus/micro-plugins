@@ -59,6 +59,11 @@ function completionAction(bp)
 			local idx = bp.Buf.CurSuggestion
 			local entry = currentResults[(idx % #currentResults) + 1]
 			if entry then
+				if entry.additionalTextEdits then
+					pendingCompletionEdits = entry.additionalTextEdits
+				else
+					pendingCompletionEdits = nil
+				end
 				showCompletionDetails(bp, entry)
 			end
 		end
@@ -243,6 +248,12 @@ local function performCompletion(bp, results)
 	deletePrefix(bp, prefix)
 	bp.Buf:Autocomplete(createBufferComplete(results))
 	bp.Cursor:ResetSelection()
+
+	if entry and entry.additionalTextEdits then
+		pendingCompletionEdits = entry.additionalTextEdits
+	else
+		pendingCompletionEdits = nil
+	end
 
 	showCompletionDetails(bp, entry)
 end

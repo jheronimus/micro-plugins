@@ -33,7 +33,16 @@ function hoverActionResponse(bp, data)
 		elseif #data.result.contents > 0 then
 			msg = data.result.contents[1].value
 		end
-		if config.GetGlobalOption("lsp.autocompleteDetails") and #mysplit(msg, "\n") > 1 then
+		if micro.ShowOverlay then
+			micro.ShowOverlay({
+				anchor = "top-right",
+				title = "Documentation",
+				content = msg,
+				border = true,
+				autoclose = true,
+				width = 60,
+			})
+		elseif config.GetGlobalOption("lsp.autocompleteDetails") and #mysplit(msg, "\n") > 1 then
 			if not splitBP then
 				local tmpName = ("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"):random(32)
 				local logBuf = buffer.NewBuffer(msg, tmpName)
@@ -47,6 +56,6 @@ function hoverActionResponse(bp, data)
 			end
 		else
 			micro.InfoBar():Message(msg)
-		end --]]
+		end
 	end
 end

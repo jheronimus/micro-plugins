@@ -5,8 +5,32 @@ local util = import("micro/util")
 local buffer = import("micro/buffer")
 local fmt = import("fmt")
 version = version or {}
+rawDiagnostics = rawDiagnostics or {}
+pendingCompletionEdits = nil
+
+function commitPendingCompletionEdits(bp)
+	if pendingCompletionEdits and #pendingCompletionEdits > 0 then
+		local editsToApply = pendingCompletionEdits
+		pendingCompletionEdits = nil
+		applyEditsToBuffer(bp, editsToApply)
+	end
+end
+
+function getDiagnosticsForRange(uri, startLine, endLine)
+	local uriDiags = rawDiagnostics[normalizeUri(uri)] or {}
+	local matched = {}
+	for _, d in ipairs(uriDiags) do
+		if d.range and d.range.start and d.range["end"] then
+			if d.range["end"].line >= startLine and d.range.start.line <= endLine then
+				table.insert(matched, d)
+			end
+		end
+	end
+	return matched
+end
 
 function preRune(bp, r)
+	commitPendingCompletionEdits(bp)
 	if splitBP ~= nil then
 		pcall(function()
 			splitBP:Unsplit()
@@ -53,7 +77,7 @@ local function shouldTriggerCompletion(cap, ignored, r)
 	return triggers and contains(triggers, r)
 end
 
-local function shouldTriggerHover(cap, ignored, r)
+local function shouldTriggerSignature(cap, ignored, r)
 	if contains(ignored, "signature") or not cap.signatureHelpProvider then
 		return false
 	end
@@ -69,8 +93,8 @@ local function checkTriggerCharacters(bp, filetype, r)
 	local cap = capabilities[filetype]
 	if shouldTriggerCompletion(cap, ignored, r) then
 		completionAction(bp)
-	elseif shouldTriggerHover(cap, ignored, r) then
-		hoverAction(bp)
+	elseif shouldTriggerSignature(cap, ignored, r) then
+		signatureAction(bp)
 	end
 end
 
@@ -182,6 +206,7 @@ function onAutocomplete(bp)
 end
 
 function onEscape(bp)
+	pendingCompletionEdits = nil
 	if splitBP ~= nil then
 		pcall(function()
 			splitBP:Unsplit()
@@ -191,6 +216,7 @@ function onEscape(bp)
 end
 
 function preInsertNewline(bp)
+	commitPendingCompletionEdits(bp)
 	if bp.Buf.Path == "References found" then
 		local cur = bp.Buf:GetActiveCursor()
 		cur:SelectLine()
@@ -311,6 +337,7 @@ local function handlePublishDiagnostics(data)
 		micro.Log("Dropping outdated diagnostics for", data.params.uri)
 		return
 	end
+	rawDiagnostics[normalizeUri(data.params.uri)] = data.params.diagnostics or {}
 	local bufs = findBuffersByUri(data.params.uri)
 	if #bufs == 0 and micro.CurPane() ~= nil and micro.CurPane().Buf ~= nil then
 		local curBuf = micro.CurPane().Buf

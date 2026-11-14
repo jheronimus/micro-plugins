@@ -4,6 +4,6 @@ tasks:
   validate:
     desc: Validate formatting (StyLua), linting (Selene), and complexity (Luacheck <= 10)
     cmds:
-      - mise exec -- stylua --check .
-      - mise exec -- selene .
+      - stylua --check .
+      - selene .
       - luacheck .

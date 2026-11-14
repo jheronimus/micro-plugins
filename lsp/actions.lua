@@ -7,6 +7,8 @@ local commands = {
 	["format"] = { action = formatAction },
 	["references"] = { action = referencesAction, shortcut = "Alt-r" },
 	["rename"] = { action = renameAction, shortcut = "F6" },
+	["codeaction"] = { action = codeAction, shortcut = "Alt-a" },
+	["signature"] = { action = signatureAction },
 }
 
 function defineActions()

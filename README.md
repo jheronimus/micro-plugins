@@ -41,7 +41,7 @@ micro -plugin install delve
 
 ## Local Development & Validation
 
-This repository uses [mise](https://mise.jdx.dev/), [StyLua](https://github.com/JohnnyMorganz/StyLua), [Selene](https://github.com/Kampfkarren/selene), and [Luacheck](https://github.com/lunarmodules/luacheck).
+This repository uses [Homebrew](https://brew.sh/), [StyLua](https://github.com/JohnnyMorganz/StyLua), [Selene](https://github.com/Kampfkarren/selene), and [Luacheck](https://github.com/lunarmodules/luacheck).
 
 To validate code formatting, linting, and cyclomatic complexity ($\le 10$):
 
