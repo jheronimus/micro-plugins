@@ -11,6 +11,15 @@ local HOVER_MAX_HEIGHT = 28
 -- headings bold, code blocks dimmed, links flattened to their label,
 -- reference link definitions dropped.
 local function flattenInline(s)
+	-- pylsp emits HTML entities in its hover markdown (docstring
+	-- indentation becomes &nbsp;); decode the common set, with &amp;
+	-- last so double-escaped entities decode exactly once
+	s = s:gsub("&nbsp;", " ")
+	s = s:gsub("&lt;", "<")
+	s = s:gsub("&gt;", ">")
+	s = s:gsub("&quot;", '"')
+	s = s:gsub("&#39;", "'")
+	s = s:gsub("&amp;", "&")
 	-- [text][ref] and [text](url) -> text
 	s = s:gsub("%[([^%]]*)%]%[[^%]]*%]", "%1")
 	s = s:gsub("%[([^%]]*)%]%([^%)]*%)", "%1")
