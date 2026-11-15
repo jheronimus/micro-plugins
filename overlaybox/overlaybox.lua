@@ -146,12 +146,16 @@ local function wrapSource(innerW)
 	box.firstWrapped = {}
 	for si, l in ipairs(box.source) do
 		local entry = (type(l) == "table") and l or { text = tostring(l) }
-		for _, wl in ipairs(wrapLine(entry.text or "", innerW)) do
+		local wrapped = wrapLine(entry.text or "", innerW)
+		for _, wl in ipairs(wrapped) do
 			box.wrapped[#box.wrapped + 1] = {
 				text = wl,
 				bold = entry.bold,
 				italic = entry.italic,
+				strike = entry.strike,
 				color = entry.color,
+				-- styled segments only survive when no re-wrap happened
+				segments = (#wrapped == 1) and entry.segments or nil,
 				srcIndex = si,
 			}
 		end
@@ -270,7 +274,21 @@ local function styleForEntry(entry)
 	if entry.italic then
 		style = style:Italic(true)
 	end
+	if entry.strike then
+		style = style:StrikeThrough(true)
+	end
 	return style
+end
+
+local function drawSegments(entry, x, y, maxWidth, active)
+	for _, seg in ipairs(entry.segments) do
+		local style = styleForEntry(seg)
+		if active then
+			style = style:Reverse(true)
+		end
+		overlay.DrawText(seg.text, x, y, maxWidth, 1, style)
+		x = x + runeLen(seg.text)
+	end
 end
 
 local function drawContent()
@@ -283,13 +301,18 @@ local function drawContent()
 			break
 		end
 		local entry = box.wrapped[idx]
-		local style = styleForEntry(entry)
 		-- activeItem is a source-item index; every wrapped line belonging
 		-- to that item is highlighted
-		if box.activeItem ~= nil and entry.srcIndex - 1 == box.activeItem then
-			style = style:Reverse(true)
+		local active = box.activeItem ~= nil and entry.srcIndex - 1 == box.activeItem
+		if entry.segments ~= nil then
+			drawSegments(entry, startX, startY + i, box.innerW, active)
+		else
+			local style = styleForEntry(entry)
+			if active then
+				style = style:Reverse(true)
+			end
+			overlay.DrawText(entry.text, startX, startY + i, box.innerW, 1, style)
 		end
-		overlay.DrawText(entry.text, startX, startY + i, box.innerW, 1, style)
 	end
 end
 

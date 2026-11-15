@@ -100,5 +100,7 @@ globals:
     any: true
   normalizeUri:
     any: true
+  normalizeContents:
+    any: true
   init:
     any: true

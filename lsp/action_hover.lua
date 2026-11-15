@@ -1,105 +1,13 @@
 local micro = import("micro")
 local fmt = import("fmt")
 
--- Hover popup geometry: overlaybox word-wraps content to its inner width,
--- so paragraphs are pushed as single entries; HOVER_TEXT_WIDTH is that
--- inner width, +4 converts it to the overlaybox outer width.
+-- Hover popup geometry: render.lua pre-wraps content to HOVER_TEXT_WIDTH,
+-- which equals overlaybox's inner width (+4 converts it to the outer
+-- width, matching overlaybox's border+padding).
 local HOVER_TEXT_WIDTH = 72
 local HOVER_MAX_HEIGHT = 28
 
--- Renders gopls hover markdown into styled line entries for overlaybox:
--- headings bold, code blocks dimmed, links flattened to their label,
--- reference link definitions dropped.
-local function flattenInline(s)
-	-- pylsp emits HTML entities in its hover markdown (docstring
-	-- indentation becomes &nbsp;); decode the common set, with &amp;
-	-- last so double-escaped entities decode exactly once
-	s = s:gsub("&nbsp;", " ")
-	s = s:gsub("&lt;", "<")
-	s = s:gsub("&gt;", ">")
-	s = s:gsub("&quot;", '"')
-	s = s:gsub("&#39;", "'")
-	s = s:gsub("&amp;", "&")
-	-- [text][ref] and [text](url) -> text
-	s = s:gsub("%[([^%]]*)%]%[[^%]]*%]", "%1")
-	s = s:gsub("%[([^%]]*)%]%([^%)]*%)", "%1")
-	-- **bold**, *italic*, `code` -> plain text
-	s = s:gsub("%*%*([^*]+)%*%*", "%1")
-	s = s:gsub("%*([^*]+)%*", "%1")
-	s = s:gsub("`([^`]*)`", "%1")
-	-- unescape backslash-escaped punctuation (godoc emits list markers as
-	-- "1\." per CommonMark); escapes before non-punctuation stay literal
-	s = s:gsub("\\(%p)", "%1")
-	return s
-end
-
-local function isRefDef(line)
-	return line:match("^%s*%[[^%]]*%]:%s*%S") ~= nil
-end
-
--- classifies a non-blank, non-code line: returns "para" for plain
--- paragraph text, "drop" for link reference definitions, or the styled
--- entry for headings, rules, and list items
-local function classifyLine(trimmed, width)
-	if isRefDef(trimmed) then
-		return "drop", nil
-	end
-	local title = trimmed:match("^#+%s+(.*)$")
-	if title then
-		return "entry", { text = flattenInline(title), bold = true }
-	end
-	if trimmed:match("^%-%-%-+$") or trimmed:match("^%*%*%*+$") then
-		-- comment, not divider: most themes (e.g. monokai) don't define
-		-- divider, so it would fall back to a bright default foreground
-		return "entry", { text = string.rep("─", width), color = "comment" }
-	end
-	if trimmed:match("^[-*+]%s") or trimmed:match("^%d+%.%s") then
-		return "entry", flattenInline(trimmed)
-	end
-	return "para", nil
-end
-
-function renderMarkdown(text, width)
-	local entries = {}
-	local para = {}
-	local inCode = false
-
-	local function flushPara()
-		if #para == 0 then
-			return
-		end
-		entries[#entries + 1] = table.concat(para, " ")
-		para = {}
-	end
-
-	for line in (text .. "\n"):gmatch("(.-)\r?\n") do
-		local trimmed = line:match("^%s*(.-)%s*$")
-		if trimmed:sub(1, 3) == "```" then
-			flushPara()
-			inCode = not inCode
-		elseif inCode then
-			entries[#entries + 1] = { text = line, color = "comment" }
-		elseif trimmed == "" then
-			flushPara()
-			entries[#entries + 1] = ""
-		else
-			local kind, entry = classifyLine(trimmed, width)
-			if kind == "para" then
-				table.insert(para, flattenInline(trimmed))
-			else
-				flushPara()
-				if kind == "entry" then
-					entries[#entries + 1] = entry
-				end
-			end
-		end
-	end
-	flushPara()
-	return entries
-end
-
 -- the hover action request and response
--- the hoverActionResponse is hooked up in
 function hoverAction(bp)
 	local filetype = bp.Buf:FileType()
 	if cmd[filetype] ~= nil then
@@ -121,25 +29,27 @@ function hoverAction(bp)
 end
 
 function hoverActionResponse(bp, data)
-	if data.result and data.result.contents ~= nil and data.result.contents ~= "" then
-		local msg = ""
-		if data.result.contents.value then
-			msg = data.result.contents.value
-		elseif #data.result.contents > 0 then
-			msg = data.result.contents[1].value
-		end
-		if overlaybox ~= nil then
-			overlaybox.show({
-				anchor = "top-right",
-				title = "Documentation",
-				lines = renderMarkdown(msg, HOVER_TEXT_WIDTH),
-				border = true,
-				autoclose = true,
-				width = HOVER_TEXT_WIDTH + 4,
-				maxHeight = HOVER_MAX_HEIGHT,
-			})
-		else
-			micro.InfoBar():Message(msg)
-		end
+	local result = data.result
+	if result == nil or result.contents == nil or result.contents == "" then
+		return
 	end
+	local contents = normalizeContents(result.contents)
+	if contents == nil or contents.text == "" then
+		return
+	end
+	-- plaintext is shown as-is; markdown needs the popup renderer, and
+	-- without overlaybox there is nothing to render lines into
+	if contents.kind == "plaintext" or overlaybox == nil then
+		micro.InfoBar():Message(contents.text)
+		return
+	end
+	overlaybox.show({
+		anchor = "top-right",
+		title = "Documentation",
+		lines = renderMarkdown(contents.text, HOVER_TEXT_WIDTH),
+		border = true,
+		autoclose = true,
+		width = HOVER_TEXT_WIDTH + 4,
+		maxHeight = HOVER_MAX_HEIGHT,
+	})
 end

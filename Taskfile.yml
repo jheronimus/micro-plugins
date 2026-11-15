@@ -7,3 +7,8 @@ tasks:
       - stylua --check .
       - selene .
       - luacheck .
+
+  test:
+    desc: Run plugin unit tests (LSP renderer)
+    cmds:
+      - lua tests/run.lua
