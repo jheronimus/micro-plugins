@@ -323,7 +323,17 @@ local function drawContent()
 	end
 end
 
+-- micro repaints only changed cells (displayBuffer stops at EOF and
+-- BufWindow.Clear is never called), so cells this plugin stops drawing
+-- keep their stale content forever. Any rect the window abandons must
+-- be explicitly repainted with the buffer's own background style.
 local lastRect = nil
+
+local function clearRect(r)
+	if r ~= nil then
+		overlay.DrawRect(r.x, r.y, r.w, r.h, config.DefStyle)
+	end
+end
 
 local function draw()
 	if box == nil then
@@ -333,15 +343,15 @@ local function draw()
 	clampScroll()
 	position()
 	if
-		lastRect == nil
-		or lastRect.x ~= box.rect.x
-		or lastRect.y ~= box.rect.y
-		or lastRect.w ~= box.rect.w
-		or lastRect.h ~= box.rect.h
+		lastRect ~= nil
+		and (
+			lastRect.x ~= box.rect.x
+			or lastRect.y ~= box.rect.y
+			or lastRect.w ~= box.rect.w
+			or lastRect.h ~= box.rect.h
+		)
 	then
-		-- the window moved or resized: cells it no longer covers keep
-		-- whatever was last drawn there until a full repaint clears them
-		overlay.Redraw()
+		clearRect(lastRect)
 	end
 	lastRect = box.rect
 	overlay.DrawRect(box.rect.x, box.rect.y, box.rect.w, box.rect.h, overlay.Style())
@@ -399,12 +409,6 @@ function show(opts)
 		box.source[#box.source + 1] = l
 	end
 	box.srcCount = #box.source
-	-- micro repaints only changed cells: force a full redraw so stale
-	-- cells from overlays that stopped drawing (e.g. lsp suppressing its
-	-- diagnostics while this window is open) get cleared
-	if overlay ~= nil then
-		overlay.Redraw()
-	end
 end
 
 function hide()
@@ -414,10 +418,8 @@ function hide()
 		cb()
 	end
 	box = nil
+	clearRect(lastRect)
 	lastRect = nil
-	if overlay ~= nil then
-		overlay.Redraw()
-	end
 end
 
 function isActive()
