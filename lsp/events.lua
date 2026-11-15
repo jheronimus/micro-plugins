@@ -5,8 +5,9 @@ local util = import("micro/util")
 local buffer = import("micro/buffer")
 local fmt = import("fmt")
 local overlayOk, overlay = pcall(import, "micro/overlay")
-version = version or {}
-rawDiagnostics = rawDiagnostics or {}
+-- events.lua loads before main.lua (alphabetical file order); rawDiagnostics
+-- is only declared here, version comes from main.lua
+rawDiagnostics = {}
 
 function getDiagnosticsForRange(uri, startLine, endLine)
 	local uriDiags = rawDiagnostics[normalizeUri(uri)] or {}
@@ -24,13 +25,7 @@ end
 local function sendDocumentChange(bp, filetype)
 	local send = withSend(filetype)
 	local uri = getUriFromBuf(bp.Buf)
-	-- allow the document contents to be escaped properly for the JSON string
-	local content = util.String(bp.Buf:Bytes())
-		:gsub("\\", "\\\\")
-		:gsub("\n", "\\n")
-		:gsub("\r", "\\r")
-		:gsub('"', '\\"')
-		:gsub("\t", "\\t")
+	local content = jsonEscape(util.String(bp.Buf:Bytes()))
 	-- increase change version
 	version[uri] = (version[uri] or 0) + 1
 	send(
@@ -250,7 +245,6 @@ end
 
 function onBufferOpen(buf)
 	local filetype = buf:FileType()
-	micro.Log("ONBUFFEROPEN", filetype)
 	if filetype ~= "unknown" and not cmd[filetype] then
 		return startServer(filetype, handleInitialized, buf)
 	end
@@ -406,12 +400,8 @@ local function handleLspMessage(filetype, data, rawMessage)
 		handleWindowShowMessage(filetype, data)
 	elseif isLogMessage(data.method) then
 		micro.Log(data.params.message)
-	elseif rawMessage:starts("Content-Length:") then
-		if rawMessage:find('"') and not rawMessage:find('"result":null') then
-			micro.Log("Unhandled message 1", filetype, rawMessage, currentAction[filetype])
-		end
 	else
-		micro.Log("Unhandled message 2", filetype, rawMessage)
+		micro.Log("Unhandled message", filetype, rawMessage)
 	end
 end
 
@@ -457,7 +447,6 @@ function onStdout(filetype)
 end
 
 function onStderr(text)
-	micro.Log("ONSTDERR", text)
 	if not isIgnoredMessage(text) then
 		micro.InfoBar():Message(text)
 	end

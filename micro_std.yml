@@ -24,6 +24,8 @@ globals:
     any: true
   mysplit:
     any: true
+  jsonEscape:
+    any: true
   getUriFromBuf:
     any: true
   contains:

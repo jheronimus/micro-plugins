@@ -414,9 +414,7 @@ function show(opts)
 		scrollY = 0,
 		source = {},
 	}
-	for _, l in ipairs(buildSource(opts)) do
-		box.source[#box.source + 1] = l
-	end
+	box.source = buildSource(opts)
 	box.srcCount = #box.source
 end
 

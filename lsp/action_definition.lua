@@ -6,7 +6,6 @@ local go_os = import("os")
 -- the definition action request and response
 function definitionAction(bp)
 	local filetype = bp.Buf:FileType()
-	micro.Log("Filetype", filetype, cmd[filetype])
 	if cmd[filetype] == nil then
 		return
 	end
@@ -28,7 +27,7 @@ function definitionAction(bp)
 end
 
 function definitionActionResponse(bp, data)
-	local results = data.result or data.partialResult
+	local results = data.result
 	if results == nil then
 		return
 	end

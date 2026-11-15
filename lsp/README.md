@@ -58,9 +58,7 @@ Example:
 	"lsp.server": "python=pyls,go=gopls,typescript=deno lsp,rust=rust-analyzer",
 	"lsp.formatOnSave": true,
 	"lsp.ignoreMessages": "LS message1 to ignore|LS message 2 to ignore|...",
-	"lsp.tabcompletion": true,
-	"lsp.ignoreTriggerCharacters": "completion,signature",
-	"lsp.autocompleteDetails": false
+	"lsp.ignoreTriggerCharacters": "completion,signature"
 }
 ```
 
@@ -79,12 +77,9 @@ You can add a line such as the following to your shell profile (e.g. .bashrc):
 export MICRO_LSP='python=pyls,go=gopls,typescript=deno lsp={"importMap":"import_map.json"},rust=rust-analyzer'
 ```
 
-If neither the MICRO_LSP nor the lsp.server is set, then the plugin falls back
-to the following settings:
-
-```
-python=pylsp,go=gopls,typescript=deno lsp,javascript=deno lsp,markdown=deno lsp,json=deno lsp,jsonc=deno lsp,rust=rust-analyzer,lua=lua-lsp,c++=clangd
-```
+If neither the MICRO_LSP nor the lsp.server is set, then the plugin picks the
+first installed candidate per language from `servers.lua` (detected via
+`which`).
 
 The initialization options can alternatively passed by updating the
 `settings.json` with a filetype-specific settings string, e.g.:
@@ -95,9 +90,6 @@ The initialization options can alternatively passed by updating the
 	"lsp.rust": "{\"cargo\": {\"buildScripts\": {\"enable\": true} }, \"procMacro\": {\"enable\": true} }"
 }
 ```
-
-The option `lsp.autocompleteDetails` allows for showing all auto-completions in
-a horizontally split buffer view (true) instead of the status line (false).
 
 ## Testing
 

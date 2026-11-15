@@ -26,6 +26,12 @@ function mysplit(inputstr, sep)
 	return t
 end
 
+-- escape a string for embedding inside a JSON string literal (didOpen /
+-- didChange carry the whole buffer text as one string)
+function jsonEscape(s)
+	return s:gsub("\\", "\\\\"):gsub("\n", "\\n"):gsub("\r", "\\r"):gsub('"', '\\"'):gsub("\t", "\\t")
+end
+
 function contains(list, x)
 	for _, v in pairs(list) do
 		if v == x then

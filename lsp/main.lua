@@ -40,10 +40,6 @@ function init()
 	end
 end
 
-function parseOptions(inputstr)
-	return mysplit(inputstr, ",")
-end
-
 local binCache = {}
 
 local function isBinaryInstalled(bin)
@@ -75,7 +71,7 @@ local function findExplicitServer(filetype)
 	local envSettings, _ = go_os.Getenv("MICRO_LSP")
 	local settings = envSettings or config.GetGlobalOption("lsp.server")
 	if settings and #settings > 0 then
-		for _, entry in ipairs(parseOptions(settings)) do
+		for _, entry in ipairs(mysplit(settings, ",")) do
 			local part = mysplit(entry, "=")
 			if filetype == part[1] then
 				return part
@@ -176,12 +172,7 @@ function handleInitialized(buf, filetype)
 	local send = withSend(filetype)
 	local uri = getUriFromBuf(buf)
 	version[uri] = 1
-	local content = util.String(buf:Bytes())
-		:gsub("\\", "\\\\")
-		:gsub("\n", "\\n")
-		:gsub("\r", "\\r")
-		:gsub('"', '\\"')
-		:gsub("\t", "\\t")
+	local content = jsonEscape(util.String(buf:Bytes()))
 	send(
 		"textDocument/didOpen",
 		fmt.Sprintf(

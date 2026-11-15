@@ -28,8 +28,8 @@ function referencesActionResponse(bp, data)
 	if data.result == nil then
 		return
 	end
-	local results = data.result or data.partialResult
-	if results == nil or #results <= 0 then
+	local results = data.result
+	if results == nil or #results == 0 then
 		return
 	end
 
