@@ -42,13 +42,16 @@ local function delimiterFor(bufName)
 end
 
 local function isTableBuf(bp)
-	return delimiterFor(bp.Buf.Name) ~= nil or delimiterFor(bp.Buf.AbsPath) ~= nil
+	return delimiterFor(bp.Buf:GetName()) ~= nil or delimiterFor(bp.Buf.AbsPath) ~= nil
 end
 
 -- find the open buffer the transform was invoked for
 local function getBuf(bufName)
-	for _, b in ipairs(buffer.OpenBuffers()) do
-		if b.Name == bufName or b.AbsPath == bufName then
+	-- luar wraps Go slices as userdata: ipairs does not walk them
+	local bufs = buffer.OpenBuffers()
+	for i = 1, #bufs do
+		local b = bufs[i]
+		if b:GetName() == bufName or b.AbsPath == bufName then
 			return b
 		end
 	end
@@ -68,6 +71,9 @@ local function cachedFields(bufName, rawText, delim)
 	if cache == nil then
 		cache = {}
 		parseCache[bufName] = cache
+	end
+	if rawText == nil then
+		return nil -- one past the last line
 	end
 	local hit = cache[rawText]
 	if hit ~= nil then
@@ -91,7 +97,7 @@ local function bufferWidths(b, delim)
 	local fieldsPerLine = {}
 	local n = b:LinesNum()
 	for i = 0, n - 1 do
-		fieldsPerLine[i + 1] = cachedFields(b.Name, b:Line(i), delim)
+		fieldsPerLine[i + 1] = cachedFields(b:GetName(), b:Line(i), delim)
 	end
 	return computeWidths(fieldsPerLine, MAX_COL)
 end
@@ -122,11 +128,11 @@ end
 -- the raw buffer's cursor field (0-based) and delimiter, or nil if the
 -- buffer is not a table
 local function cursorField(bp)
-	local delim = delimiterFor(bp.Buf.Name) or delimiterFor(bp.Buf.AbsPath)
+	local delim = delimiterFor(bp.Buf:GetName()) or delimiterFor(bp.Buf.AbsPath)
 	if delim == nil then
 		return nil, nil
 	end
-	local fields = cachedFields(bp.Buf.Name, bp.Buf:Line(bp.Cursor.Loc.Y), delim)
+	local fields = cachedFields(bp.Buf:GetName(), bp.Buf:Line(bp.Cursor.Loc.Y), delim)
 	local col = 0
 	for i, field in ipairs(fields) do
 		col = col + runeLen(field)
@@ -151,8 +157,8 @@ function preMousePress(bp, te)
 	if dispCol < 0 then
 		return
 	end
-	local delim = delimiterFor(bp.Buf.Name) or delimiterFor(bp.Buf.AbsPath)
-	local fields = cachedFields(bp.Buf.Name, bp.Buf:Line(my), delim)
+	local delim = delimiterFor(bp.Buf:GetName()) or delimiterFor(bp.Buf.AbsPath)
+	local fields = cachedFields(bp.Buf:GetName(), bp.Buf:Line(my), delim)
 	local widths = bufferWidths(bp.Buf, delim)
 	local rawX = displayToRawCol(fields, widths, delim, dispCol, MAX_COL)
 	bp:GotoLoc(buffer.Loc(rawX, my))
@@ -204,7 +210,7 @@ function init()
 	micro.SetLineTransform("csv", transformLine)
 	-- Ctrl+K deletes the current row; micro binds nothing to it by default,
 	-- and TryBindKey will not override an existing user binding
-	micro.TryBindKey("CtrlK", "DeleteLine", false)
+	config.TryBindKey("CtrlK", "DeleteLine", false)
 	config.MakeCommand("csv.addcol", csvAddCol, config.NoComplete)
 	config.MakeCommand("csv.delcol", csvDelCol, config.NoComplete)
 end
