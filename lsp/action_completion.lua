@@ -137,10 +137,14 @@ local function startSession(bp, results)
 	end
 	local items = {}
 	for _, e in ipairs(filtered) do
+		local detail = e.detail
+		if detail == nil and e.labelDetails ~= nil then
+			detail = e.labelDetails.description
+		end
 		items[#items + 1] = {
-			label = completionLabel(e),
+			label = e.label,
 			insertText = getEntryText(e),
-			detail = e.detail,
+			detail = detail,
 			entry = e,
 		}
 	end
@@ -191,17 +195,6 @@ function showCompletionDetails(entry)
 	if text ~= "" then
 		micro.InfoBar():Message(text)
 	end
-end
-
-function completionLabel(e)
-	local detail = e.detail
-	if detail == nil and e.labelDetails ~= nil then
-		detail = e.labelDetails.description
-	end
-	if detail ~= nil and detail ~= "" then
-		return e.label .. "  " .. detail
-	end
-	return e.label
 end
 
 function firstLines(entries, count)

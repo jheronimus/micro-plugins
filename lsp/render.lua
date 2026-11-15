@@ -381,6 +381,14 @@ local function segmentsEntry(segments)
 	return { text = concatText(segments), segments = segments }
 end
 
+-- blank line between adjacent blocks (Helix-style paragraph spacing);
+-- only one, regardless of how many blank source lines separate them
+local function separate(out)
+	if #out > 0 and out[#out].text ~= "" then
+		out[#out + 1] = { text = "" }
+	end
+end
+
 -- emit wrapped lines for a list item: `prefix` leads the first line,
 -- `hang` leads every continuation line
 local function emitWrapped(out, chunks, width, prefix, hang)
@@ -404,6 +412,7 @@ local function flushPara(out, state, width)
 	if state.para == nil then
 		return
 	end
+	separate(out)
 	for _, segments in ipairs(wrapChunks(state.para, width)) do
 		out[#out + 1] = segmentsEntry(segments)
 	end
@@ -419,13 +428,20 @@ local function isFenceClose(line, marker)
 	return line:match("^%s*" .. string.rep(c, #marker) .. "+%s*$") ~= nil
 end
 
+local CODE_INDENT = "  "
+
 local function renderFenceBlock(out, lines, i, width, state)
 	state.para = nil
+	separate(out)
 	for j = i + 1, #lines do
 		if isFenceClose(lines[j], fenceMarker(lines[i])) then
 			return j + 1
 		end
-		out[#out + 1] = { text = lines[j], color = "comment" }
+		local content = lines[j]
+		if content ~= "" then
+			content = CODE_INDENT .. content
+		end
+		out[#out + 1] = { text = content, color = "comment" }
 	end
 	return #lines + 1
 end
@@ -437,6 +453,7 @@ end
 
 local function renderHeadingBlock(out, lines, i, width, state)
 	state.para = nil
+	separate(out)
 	local content = lines[i]:match(LEAD3 .. "#+%s*(.-)%s*$")
 	-- strip an ATX closing sequence ("# Title #"), which CommonMark
 	-- requires to be preceded by whitespace
@@ -446,6 +463,7 @@ local function renderHeadingBlock(out, lines, i, width, state)
 end
 
 local function renderSetextBlock(out, lines, i, width, state)
+	separate(out)
 	local parts = {}
 	for _, word in ipairs(splitWords(state.para)) do
 		parts[#parts + 1] = word.text
@@ -463,12 +481,14 @@ end
 
 local function renderRuleBlock(out, lines, i, width, state)
 	state.para = nil
+	separate(out)
 	out[#out + 1] = { text = string.rep("─", width), color = "comment" }
 	return i + 1
 end
 
 local function renderQuoteBlock(out, lines, i, width, state)
 	state.para = nil
+	separate(out)
 	local quoted = {}
 	while i <= #lines and lines[i]:match(LEAD3 .. ">") do
 		quoted[#quoted + 1] = lines[i]:match(LEAD3 .. ">%s?(.*)$")
@@ -498,12 +518,10 @@ local function listMarker(line)
 	return indentStr, bullet, content, ordered
 end
 
-local function renderListBlock(out, lines, i, width, state)
-	state.para = nil
-	local indentStr, bullet, content, ordered = listMarker(lines[i])
-	local level = math.floor(runeCount(indentStr) / 2)
-	-- marker type is the bullet character, or the ordered delimiter —
-	-- not the number, which changes on every ordered item
+-- per-level list counters; a new marker type restarts its level, and
+-- the marker type is the bullet character or the ordered delimiter —
+-- not the number, which changes on every ordered item
+local function nextMarkerText(state, level, bullet, ordered)
 	local markerType = ordered and bullet:sub(-1, -1) or bullet
 	if state.lastMarker[level] ~= markerType then
 		state.counters[level] = 0
@@ -513,13 +531,22 @@ local function renderListBlock(out, lines, i, width, state)
 		state.counters[deeper] = nil
 		state.lastMarker[deeper] = nil
 	end
-	local markerText
-	if ordered then
-		state.counters[level] = (state.counters[level] or 0) + 1
-		markerText = tostring(state.counters[level]) .. ". "
-	else
-		markerText = "• "
+	if not ordered then
+		return "• "
 	end
+	state.counters[level] = (state.counters[level] or 0) + 1
+	return tostring(state.counters[level]) .. ". "
+end
+
+local function renderListBlock(out, lines, i, width, state)
+	state.para = nil
+	if not state.listOpen then
+		separate(out)
+		state.listOpen = true
+	end
+	local indentStr, bullet, content, ordered = listMarker(lines[i])
+	local level = math.floor(runeCount(indentStr) / 2)
+	local markerText = nextMarkerText(state, level, bullet, ordered)
 	-- task list markers replace the bullet (GFM)
 	local taskMark, rest = content:match("^%[([ xX])%]%s+(.+)$")
 	if taskMark ~= nil then
@@ -555,6 +582,7 @@ end
 
 local function renderTableBlock(out, lines, i, width, state)
 	state.para = nil
+	separate(out)
 	local header = splitRow(lines[i])
 	i = i + 2 -- skip the separator row
 	local rows = {}
@@ -591,6 +619,7 @@ end
 
 local function renderCodeBlock(out, lines, i, width, state)
 	state.para = nil
+	separate(out)
 	local collected = {}
 	while i <= #lines do
 		local content = lines[i]:match("^    (.*)$") or lines[i]:match("^\t(.*)$")
@@ -608,6 +637,9 @@ local function renderCodeBlock(out, lines, i, width, state)
 		collected[#collected] = nil
 	end
 	for _, line in ipairs(collected) do
+		if line ~= "" then
+			line = CODE_INDENT .. line
+		end
 		out[#out + 1] = { text = line, color = "comment" }
 	end
 	return i
@@ -735,6 +767,9 @@ local function renderBlocks(text, width)
 			state.para = {}
 		end
 		i = blockRenderers[kind](out, lines, i, width, state)
+		if kind ~= "blank" then
+			state.listOpen = (kind == "list")
+		end
 	end
 	flushPara(out, state, width)
 	return out

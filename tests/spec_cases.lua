@@ -20,6 +20,12 @@ return {
 		expect = { "Package fmt", "implements formatted", "I/O." },
 	},
 	{ name = "paragraph joins soft breaks", md = "line one\nline two", width = 60, expect = { "line one line two" } },
+	{
+		name = "blank line between paragraphs",
+		md = "one two\n\nthree four",
+		width = 60,
+		expect = { "one two", "", "three four" },
+	},
 	{ name = "empty input", md = "", width = 40, expect = {} },
 	{ name = "trailing blanks trimmed", md = "text\n\n\n", width = 40, expect = { "text" } },
 
@@ -58,25 +64,25 @@ return {
 		name = "fenced code",
 		md = "```go\nfunc main() {}\n```",
 		width = 40,
-		expect = { { text = "func main() {}", color = "comment" } },
+		expect = { { text = "  func main() {}", color = "comment" } },
 	},
 	{
 		name = "unterminated fence",
 		md = "```go\nfunc main() {}",
 		width = 40,
-		expect = { { text = "func main() {}", color = "comment" } },
+		expect = { { text = "  func main() {}", color = "comment" } },
 	},
 	{
 		name = "tilde fence",
 		md = "~~~\na b\n~~~",
 		width = 40,
-		expect = { { text = "a b", color = "comment" } },
+		expect = { { text = "  a b", color = "comment" } },
 	},
 	{
 		name = "indented code",
 		md = "Intro:\n\n    code line\n    more",
 		width = 40,
-		expect = { "Intro:", { text = "code line", color = "comment" }, { text = "more", color = "comment" } },
+		expect = { "Intro:", "", { text = "  code line", color = "comment" }, { text = "  more", color = "comment" } },
 	},
 	{
 		name = "indented line continues paragraph",

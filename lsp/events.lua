@@ -558,8 +558,14 @@ function drawDiagSuffix(bp, line, diag, view, onCursorLine)
 	overlay.DrawText(text, endPos.X, endPos.Y, width, 1, style)
 end
 
+-- a float window always wins visually: float loads before lsp, so this
+-- overlay would otherwise draw over menus and popups
+local function floatOpen()
+	return float ~= nil and float.isActive()
+end
+
 function drawInlineDiagnostics()
-	if overlay == nil or micro.CurPane() == nil then
+	if overlay == nil or micro.CurPane() == nil or floatOpen() then
 		return
 	end
 	local tab = micro.CurTab()
