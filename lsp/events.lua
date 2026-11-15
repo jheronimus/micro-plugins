@@ -283,7 +283,7 @@ local function handleWorkspaceConfig(filetype, data)
 	shell.JobSend(cmd[filetype], fmt.Sprintf("Content-Length: %.0f\r\n\r\n%s", #res, res))
 end
 
-local function applyDiagnosticMessage(bp, diagnostic)
+local function applyDiagnosticMessage(buf, diagnostic)
 	local mtype = buffer.MTInfo
 	if diagnostic.severity == 1 then
 		mtype = buffer.MTError
@@ -291,14 +291,14 @@ local function applyDiagnosticMessage(bp, diagnostic)
 		mtype = buffer.MTWarning
 	end
 	-- server positions are UTF-16 columns; micro locations are runes
-	local startText = util.String(bp.Buf:LineBytes(diagnostic.range.start.line))
-	local endText = util.String(bp.Buf:LineBytes(diagnostic.range["end"].line))
+	local startText = util.String(buf:LineBytes(diagnostic.range.start.line))
+	local endText = util.String(buf:LineBytes(diagnostic.range["end"].line))
 	local mstart = buffer.Loc(runeColumn(startText, diagnostic.range.start.character), diagnostic.range.start.line)
 	local mend = buffer.Loc(runeColumn(endText, diagnostic.range["end"].character), diagnostic.range["end"].line)
 
 	if not isIgnoredMessage(diagnostic.message) then
 		local msg = buffer.NewMessage("lsp", diagnostic.message, mstart, mend, mtype)
-		bp:AddMessage(msg)
+		buf:AddMessage(msg)
 	end
 end
 
