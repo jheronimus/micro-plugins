@@ -528,6 +528,18 @@ local function drawPaneDiagnostics(bp)
 	end
 end
 
+-- whether a suffix drawn at (x, y) spanning `width` cells would overlap
+-- an open float window: this overlay draws after float's (later handles
+-- paint on top), so overlapping suffixes are skipped rather than painting
+-- over the window
+local function overlapsFloat(x, y, width)
+	local fr = (float ~= nil and float.rect ~= nil) and float.rect() or nil
+	if fr == nil then
+		return false
+	end
+	return y >= fr.y and y < fr.y + fr.h and x < fr.x + fr.w and x + width > fr.x
+end
+
 -- onCursorLine is rendered with the cursor-line background so the suffix
 -- blends with micro's cursor-line highlight instead of painting an opaque
 -- band over it. micro themes define such highlight groups as
@@ -550,6 +562,9 @@ function drawDiagSuffix(bp, line, diag, view, onCursorLine)
 	-- guaranteed)
 	local text = "  // " .. msg
 	local width = util.CharacterCountInString(text)
+	if overlapsFloat(endPos.X, endPos.Y, width) then
+		return
+	end
 	local style = diagStyle(diag.severity)
 	if onCursorLine then
 		local fg, bg = overlay.GetColor("cursor-line"):Decompose()
@@ -558,14 +573,8 @@ function drawDiagSuffix(bp, line, diag, view, onCursorLine)
 	overlay.DrawText(text, endPos.X, endPos.Y, width, 1, style)
 end
 
--- a float window always wins visually: float loads before lsp, so this
--- overlay would otherwise draw over menus and popups
-local function floatOpen()
-	return float ~= nil and float.isActive()
-end
-
 function drawInlineDiagnostics()
-	if overlay == nil or micro.CurPane() == nil or floatOpen() then
+	if overlay == nil or micro.CurPane() == nil then
 		return
 	end
 	local tab = micro.CurTab()
