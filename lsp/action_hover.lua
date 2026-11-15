@@ -15,15 +15,16 @@ function hoverAction(bp)
 		local send = withSend(filetype)
 		local file = bp.Buf.AbsPath
 		local line, char = requestPosition(bp)
-		currentAction[filetype] = { method = "textDocument/hover", response = hoverActionResponse }
 		send(
-			currentAction[filetype].method,
+			"textDocument/hover",
 			fmt.Sprintf(
 				'{"textDocument": {"uri": "file://%s"}, "position": {"line": %.0f, "character": %.0f}}',
 				file,
 				line,
 				char
-			)
+			),
+			nil,
+			hoverActionResponse
 		)
 	end
 end

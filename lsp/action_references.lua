@@ -12,15 +12,16 @@ function referencesAction(bp)
 	local send = withSend(filetype)
 	local file = bp.Buf.AbsPath
 	local line, char = requestPosition(bp)
-	currentAction[filetype] = { method = "textDocument/references", response = referencesActionResponse }
 	send(
-		currentAction[filetype].method,
+		"textDocument/references",
 		fmt.Sprintf(
 			'{"textDocument": {"uri": "file://%s"}, "position": {"line": %.0f, "character": %.0f}, "context": {"includeDeclaration":true}}',
 			file,
 			line,
 			char
-		)
+		),
+		nil,
+		referencesActionResponse
 	)
 end
 

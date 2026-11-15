@@ -39,16 +39,17 @@ end
 local function requestCompletion(bp, filetype, file)
 	flushDocumentChange(bp, filetype)
 	local send = withSend(filetype)
-	currentAction[filetype] = { method = "textDocument/completion", response = completionActionResponse }
 	local line, char = requestPosition(bp)
 	send(
-		currentAction[filetype].method,
+		"textDocument/completion",
 		fmt.Sprintf(
 			'{"textDocument": {"uri": "file://%s"}, "position": {"line": %.0f, "character": %.0f}}',
 			file,
 			line,
 			char
-		)
+		),
+		nil,
+		completionActionResponse
 	)
 end
 
@@ -221,8 +222,7 @@ end
 
 function requestResolve(bp, filetype, entry)
 	local send = withSend(filetype)
-	currentAction[filetype] = { method = "completionItem/resolve", response = resolveActionResponse }
-	send(currentAction[filetype].method, encodeJson(entry))
+	send("completionItem/resolve", encodeJson(entry), nil, resolveActionResponse)
 end
 
 function completionActionResponse(bp, data)

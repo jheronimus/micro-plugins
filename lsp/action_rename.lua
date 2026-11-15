@@ -19,19 +19,17 @@ local function sendRename(bp, newName)
 	local file = bp.Buf.AbsPath
 	local line, char = requestPosition(bp)
 
-	currentAction[filetype] = {
-		method = "textDocument/rename",
-		response = renameActionResponse(newName),
-	}
 	send(
-		currentAction[filetype].method,
+		"textDocument/rename",
 		fmt.Sprintf(
 			'{"textDocument": {"uri": "file://%s"}, "position": {"line": %.0f, "character": %.0f}, "newName": %s}',
 			file,
 			line,
 			char,
 			encodeJson(newName)
-		)
+		),
+		nil,
+		renameActionResponse(newName)
 	)
 end
 

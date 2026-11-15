@@ -346,11 +346,19 @@ local function handleWindowShowMessage(filetype, data)
 	end
 end
 
-local function handleCustomAction(filetype, data)
-	local bp = micro.CurPane()
-	micro.Log("Received message for ", filetype, data)
-	currentAction[filetype].response(bp, data)
-	currentAction[filetype] = {}
+-- a response to one of our requests: no method, an id, and a registered
+-- handler. Dispatch by id so overlapping requests can't misroute each
+-- other's results (previously one handler slot was overwritten by every
+-- new request and responses raced into whoever registered last)
+local function handleResponse(filetype, data)
+	local handlers = pending[filetype]
+	local handler = (handlers ~= nil and data.id ~= nil) and handlers[data.id] or nil
+	if handler == nil then
+		micro.Log("Response with no pending request:", filetype, data.id)
+		return
+	end
+	handlers[data.id] = nil
+	handler(micro.CurPane(), data)
 end
 
 local function isPublishDiagnostics(method)
@@ -386,11 +394,6 @@ local function isLogMessage(method)
 	return method == "window/logMessage" or method == "window\\/logMessage"
 end
 
-local function isCustomAction(filetype, data)
-	local action = currentAction[filetype]
-	return action and action.method and not data.method and action.response and data.jsonrpc
-end
-
 local function handleLspMessage(filetype, data, rawMessage)
 	if data.method == "workspace/configuration" then
 		handleWorkspaceConfig(filetype, data)
@@ -398,8 +401,8 @@ local function handleLspMessage(filetype, data, rawMessage)
 		handleApplyEdit(filetype, data)
 	elseif isPublishDiagnostics(data.method) then
 		handlePublishDiagnostics(data)
-	elseif isCustomAction(filetype, data) then
-		handleCustomAction(filetype, data)
+	elseif data.method == nil and data.id ~= nil then
+		handleResponse(filetype, data)
 	elseif isShowMessage(data.method) then
 		handleWindowShowMessage(filetype, data)
 	elseif isLogMessage(data.method) then
@@ -458,7 +461,7 @@ end
 
 function onExit(filetype)
 	return function(str)
-		currentAction[filetype] = nil
+		pending[filetype] = nil
 		cmd[filetype] = nil
 		-- the server is gone: forget its open documents so a restarted
 		-- server receives didOpen again (and version tracking restarts)

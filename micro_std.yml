@@ -6,7 +6,7 @@ globals:
     any: true
   cmd:
     any: true
-  currentAction:
+  pending:
     any: true
   capabilities:
     any: true

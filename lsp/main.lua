@@ -9,7 +9,7 @@ local go_os = import("os")
 local overlayOk, overlay = pcall(import, "micro/overlay")
 
 cmd = {}
-currentAction = {}
+pending = {}
 capabilities = {}
 rootUri = ""
 version = {}
@@ -103,9 +103,17 @@ local function launchServer(part, filetype, callback, targetBuf)
 	id[part[1]] = 0
 	micro.Log("Starting server", part[1])
 	cmd[part[1]] = shell.JobSpawn(runCmd, args, onStdout(part[1]), onStderr, onExit(part[1]), {})
-	currentAction[part[1]] = {
-		method = "initialize",
-		response = function(bp, data)
+	send(
+		"initialize",
+		fmt.Sprintf(
+			'{"processId": %.0f, "rootUri": "%s", "workspaceFolders": [{"name": "root", "uri": "%s"}], "initializationOptions": %s, "capabilities": {"textDocument": {"hover": {"contentFormat": ["markdown"]}, "publishDiagnostics": {"relatedInformation": false, "versionSupport": true, "codeDescriptionSupport": true, "dataSupport": true}, "signatureHelp": {"signatureInformation": {"documentationFormat": ["plaintext", "markdown"]}}}}}',
+			go_os.Getpid(),
+			rootUri,
+			rootUri,
+			initOptions
+		),
+		nil,
+		function(bp, data)
 			send("initialized", "{}", true)
 			capabilities[filetype] = data.result and data.result.capabilities or {}
 			local b = targetBuf
@@ -115,17 +123,7 @@ local function launchServer(part, filetype, callback, targetBuf)
 			if b ~= nil then
 				callback(b, filetype)
 			end
-		end,
-	}
-	send(
-		currentAction[part[1]].method,
-		fmt.Sprintf(
-			'{"processId": %.0f, "rootUri": "%s", "workspaceFolders": [{"name": "root", "uri": "%s"}], "initializationOptions": %s, "capabilities": {"textDocument": {"hover": {"contentFormat": ["markdown"]}, "publishDiagnostics": {"relatedInformation": false, "versionSupport": true, "codeDescriptionSupport": true, "dataSupport": true}, "signatureHelp": {"signatureInformation": {"documentationFormat": ["plaintext", "markdown"]}}}}}',
-			go_os.Getpid(),
-			rootUri,
-			rootUri,
-			initOptions
-		)
+		end
 	)
 end
 
@@ -145,20 +143,32 @@ function startServer(filetype, callback, targetBuf)
 	end
 end
 
+-- withSend returns a sender for the filetype's server. Requests (anything
+-- sent with isNotification falsy) get a JSON-RPC id, and onResult is
+-- registered under that id — responses are dispatched by id in
+-- events.lua, so overlapping requests can't misroute each other's results
 function withSend(filetype)
-	return function(method, params, isNotification)
+	return function(method, params, isNotification, onResult)
 		if cmd[filetype] == nil then
 			return
 		end
 
 		micro.Log(filetype .. ">>> " .. method)
+		local msgId
+		if not isNotification then
+			msgId = id[filetype]
+			id[filetype] = id[filetype] + 1
+			if pending[filetype] == nil then
+				pending[filetype] = {}
+			end
+			pending[filetype][msgId] = onResult
+		end
 		local msg = fmt.Sprintf(
 			'{"jsonrpc": "2.0", %s"method": "%s", "params": %s}',
-			not isNotification and fmt.Sprintf('"id": %.0f, ', id[filetype]) or "",
+			msgId ~= nil and fmt.Sprintf('"id": %.0f, ', msgId) or "",
 			method,
 			params
 		)
-		id[filetype] = id[filetype] + 1
 		msg = fmt.Sprintf("Content-Length: %.0f\r\n\r\n%s", #msg, msg)
 		micro.Log(msg)
 		shell.JobSend(cmd[filetype], msg)

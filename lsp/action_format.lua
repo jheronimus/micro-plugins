@@ -11,9 +11,8 @@ function formatAction(bp, callback)
 	local file = bp.Buf.AbsPath
 	local cfg = bp.Buf.Settings
 
-	currentAction[filetype] = { method = "textDocument/formatting", response = formatActionResponse(callback) }
 	send(
-		currentAction[filetype].method,
+		"textDocument/formatting",
 		fmt.Sprintf(
 			'{"textDocument": {"uri": "file://%s"}, "options": {"tabSize": %.0f, "insertSpaces": %t, "trimTrailingWhitespace": %t, "insertFinalNewline": %t}}',
 			file,
@@ -21,7 +20,9 @@ function formatAction(bp, callback)
 			cfg["tabstospaces"],
 			cfg["rmtrailingws"],
 			cfg["eofnewline"]
-		)
+		),
+		nil,
+		formatActionResponse(callback)
 	)
 end
 

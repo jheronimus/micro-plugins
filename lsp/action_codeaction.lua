@@ -111,13 +111,8 @@ function codeAction(bp)
 	local diags = getDiagnosticsForRange(file, sLine, eLine)
 	local contextJson = fmt.Sprintf('{"diagnostics": %s}', serializeDiagnostics(diags))
 
-	currentAction[filetype] = {
-		method = "textDocument/codeAction",
-		response = codeActionResponse,
-	}
-
 	send(
-		currentAction[filetype].method,
+		"textDocument/codeAction",
 		fmt.Sprintf(
 			'{"textDocument": {"uri": "file://%s"}, "range": {"start": {"line": %.0f, "character": %.0f}, "end": {"line": %.0f, "character": %.0f}}, "context": %s}',
 			file,
@@ -126,6 +121,8 @@ function codeAction(bp)
 			eLine,
 			eChar,
 			contextJson
-		)
+		),
+		nil,
+		codeActionResponse
 	)
 end

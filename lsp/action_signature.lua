@@ -99,18 +99,15 @@ function signatureAction(bp)
 	local file = bp.Buf.AbsPath
 	local line, char = requestPosition(bp)
 
-	currentAction[filetype] = {
-		method = "textDocument/signatureHelp",
-		response = signatureActionResponse,
-	}
-
 	send(
-		currentAction[filetype].method,
+		"textDocument/signatureHelp",
 		fmt.Sprintf(
 			'{"textDocument": {"uri": "file://%s"}, "position": {"line": %.0f, "character": %.0f}}',
 			file,
 			line,
 			char
-		)
+		),
+		nil,
+		signatureActionResponse
 	)
 end
