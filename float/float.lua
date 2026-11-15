@@ -331,9 +331,10 @@ local lastRect = nil
 
 local function clearRect(r)
 	if r ~= nil then
-		-- the theme's default group carries the buffer background, so the
-		-- cleared area is seamless with micro's own fill
-		overlay.DrawRect(r.x, r.y, r.w, r.h, overlay.GetColor("default"))
+		-- paint with the terminal default: rows below the buffer's end are
+		-- never repainted by micro, so abandoned cells must return to the
+		-- untouched look; in-view cells are repainted by the next Display
+		overlay.DrawRect(r.x, r.y, r.w, r.h, overlay.Style())
 	end
 end
 

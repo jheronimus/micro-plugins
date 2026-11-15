@@ -131,10 +131,15 @@ return {
 		expect = { "1. If the operand is a reflect.Value" },
 	},
 	{
-		name = "pylsp nbsp indentation decodes to indented code",
+		name = "nbsp-indented docstring line stays prose, indented",
 		md = "&nbsp;&nbsp;&nbsp;&nbsp;bytes",
 		width = 40,
-		expect = { { text = "  bytes", color = "comment" } },
+		expect = {
+			{
+				text = "    bytes",
+				segments = { { text = "    " }, { text = "bytes" } },
+			},
+		},
 	},
 	{ name = "entity named", md = "a &amp; b", width = 40, expect = { "a & b" } },
 	{ name = "entity decimal and hex", md = "&#65;&#x42;C", width = 40, expect = { "ABC" } },

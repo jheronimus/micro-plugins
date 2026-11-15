@@ -51,9 +51,6 @@ end
 -- ========== HTML entities and code points ==========
 
 local entities = {
-	nbsp = " ",
-	ensp = " ",
-	thinsp = " ",
 	amp = "&",
 	lt = "<",
 	gt = ">",
@@ -116,6 +113,14 @@ local function decodeEntities(s)
 		return entities[name] or ("&" .. name .. ";")
 	end)
 	return s
+end
+
+-- &nbsp; runs are decoded at text-render time, not before block
+-- classification: basedpyright/pylsp indent docstring sections with
+-- them, and decoding early would turn those lines into indented code
+-- blocks (dimmed) instead of prose
+local function fin(s)
+	return (s:gsub("&nbsp;", " "):gsub("&ensp;", " "):gsub("&thinsp;", " "))
 end
 
 -- ========== inline parsing ==========
@@ -413,12 +418,30 @@ local function flushPara(out, state, width)
 		return
 	end
 	separate(out)
-	for _, chunks in ipairs(state.para) do
-		for _, segments in ipairs(wrapChunks(chunks, width)) do
-			out[#out + 1] = segmentsEntry(segments)
+	for _, group in ipairs(state.para) do
+		local text = concatText(group.chunks)
+		-- a dash (or equals) run inside a hard-broken paragraph is a
+		-- setext underline: promote the previous line to a heading
+		if #out > 0 and out[#out].text ~= "" and (text:match("^%-%-+%s*$") or text:match("^=+%s*$")) then
+			out[#out].bold = true
+			out[#out].color = "constant"
+			out[#out].segments = nil
+		else
+			local pad = string.rep(" ", group.indent)
+			for _, segments in ipairs(wrapChunks(group.chunks, math.max(width - group.indent, 1))) do
+				local all = {}
+				if pad ~= "" then
+					all[#all + 1] = { text = pad }
+				end
+				for _, seg in ipairs(segments) do
+					all[#all + 1] = seg
+				end
+				out[#out + 1] = { text = pad .. concatText(segments), segments = all }
+			end
 		end
 	end
 	state.para = nil
+	state.paraHard = false
 end
 
 local function fenceMarker(line)
@@ -439,7 +462,7 @@ local function renderFenceBlock(out, lines, i, width, state)
 		if isFenceClose(lines[j], fenceMarker(lines[i])) then
 			return j + 1
 		end
-		local content = lines[j]
+		local content = fin(lines[j])
 		if content ~= "" then
 			content = CODE_INDENT .. content
 		end
@@ -460,7 +483,7 @@ local function renderHeadingBlock(out, lines, i, width, state)
 	-- strip an ATX closing sequence ("# Title #"), which CommonMark
 	-- requires to be preceded by whitespace
 	content = content:match("^(.-)%s+#+%s*$") or content
-	out[#out + 1] = { text = plainText(content), bold = true, color = "constant" }
+	out[#out + 1] = { text = plainText(fin(content)), bold = true, color = "constant" }
 	return i + 1
 end
 
@@ -468,7 +491,7 @@ local function renderSetextBlock(out, lines, i, width, state)
 	separate(out)
 	local chunks = {}
 	for _, group in ipairs(state.para) do
-		for _, chunk in ipairs(group) do
+		for _, chunk in ipairs(group.chunks) do
 			chunks[#chunks + 1] = chunk
 		end
 	end
@@ -502,7 +525,7 @@ local function renderQuoteBlock(out, lines, i, width, state)
 		quoted[#quoted + 1] = lines[i]:match(LEAD3 .. ">%s?(.*)$")
 		i = i + 1
 	end
-	local text = plainText(table.concat(quoted, " "))
+	local text = plainText(fin(table.concat(quoted, " ")))
 	if text ~= "" then
 		for _, part in ipairs(wrapChunks({ { text = text } }, math.max(width - 2, 1))) do
 			out[#out + 1] = { text = "│ " .. concatText(part), color = "comment", italic = true }
@@ -561,7 +584,7 @@ local function renderListBlock(out, lines, i, width, state)
 		markerText = (taskMark == " ") and "☐ " or "☑ "
 		content = rest
 	end
-	local chunks = parseInlineText(content, {}, 0)
+	local chunks = parseInlineText(fin(content), {}, 0)
 	local hang = indentStr .. string.rep(" ", runeCount(markerText))
 	emitWrapped(out, chunks, width, indentStr .. markerText, hang)
 	return i + 1
@@ -610,7 +633,7 @@ local function renderTableBlock(out, lines, i, width, state)
 	local function emitRow(cells, bold)
 		local parts = {}
 		for c = 1, #header do
-			local cell = plainText(cells[c] or "")
+			local cell = plainText(fin(cells[c] or ""))
 			local pad = string.rep(" ", widths[c] - runeCount(cell))
 			parts[#parts + 1] = "│ " .. cell .. pad .. " "
 		end
@@ -646,7 +669,7 @@ local function renderCodeBlock(out, lines, i, width, state)
 	end
 	for _, line in ipairs(collected) do
 		if line ~= "" then
-			line = CODE_INDENT .. line
+			line = CODE_INDENT .. fin(line)
 		end
 		out[#out + 1] = { text = line, color = "comment" }
 	end
@@ -654,14 +677,15 @@ local function renderCodeBlock(out, lines, i, width, state)
 end
 
 local function renderParagraphBlock(out, lines, i, width, state)
-	local chunks = parseInlineText(trim(lines[i]))
+	local expanded = fin(lines[i])
+	local chunks = parseInlineText(trim(expanded))
 	if state.para == nil or #state.para == 0 then
-		state.para = { chunks }
+		state.para = { { chunks = chunks, indent = #expanded:match("^ *") } }
 	elseif state.paraHard then
-		table.insert(state.para, chunks)
+		table.insert(state.para, { chunks = chunks, indent = #expanded:match("^ *") })
 	else
 		-- soft break: continue the previous line
-		local last = state.para[#state.para]
+		local last = state.para[#state.para].chunks
 		for _, chunk in ipairs(chunks) do
 			table.insert(last, chunk)
 		end
