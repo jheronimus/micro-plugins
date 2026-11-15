@@ -215,15 +215,20 @@ local function clampScroll()
 	box.scrollY = math.max(math.min(box.scrollY, maxScroll), 0)
 end
 
--- Minimal frame: horizontal rules top and bottom, no side borders. The
--- right column holds a thumb-only scrollbar when the content overflows —
--- a proportional thumb sized to the visible/total ratio and no track,
--- the way VS Code and Neovim scrollbar plugins render it.
+-- Frame with side borders; the right column doubles as the scrollbar.
+-- No track — the border itself is the track — and a proportional thumb
+-- (sized to the visible/total ratio, the way VS Code and Neovim
+-- scrollbar plugins render it) drawn over the border in the comment
+-- color, only when the content actually overflows.
 local function drawBorder()
 	local r = box.rect
 	local style = overlay.GetColor("divider")
-	overlay.DrawText(string.rep("─", r.w), r.x, r.y, r.w, 1, style)
-	overlay.DrawText(string.rep("─", r.w), r.x, r.y + r.h - 1, r.w, 1, style)
+	overlay.DrawText("┌" .. string.rep("─", r.w - 2) .. "┐", r.x, r.y, r.w, 1, style)
+	overlay.DrawText("└" .. string.rep("─", r.w - 2) .. "┘", r.x, r.y + r.h - 1, r.w, 1, style)
+	for row = 1, r.h - 2 do
+		overlay.DrawText("│", r.x, r.y + row, 1, 1, style)
+		overlay.DrawText("│", r.x + r.w - 1, r.y + row, 1, 1, style)
+	end
 	local maxScroll = math.max(box.totalLines - box.innerH, 0)
 	if maxScroll == 0 then
 		return
