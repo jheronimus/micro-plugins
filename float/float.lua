@@ -566,11 +566,15 @@ local function activate()
 	return
 end
 
+-- tcell names the escape key "Esc" (KeyNames[KeyESC]); both accepted
+local function escapeHandler()
+	hide()
+	return false
+end
+
 local keyHandlers = {
-	Escape = function()
-		hide()
-		return false
-	end,
+	Escape = escapeHandler,
+	Esc = escapeHandler,
 	Up = function()
 		return navigate(-1)
 	end,

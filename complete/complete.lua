@@ -198,7 +198,12 @@ local WHEEL_DOWN = 512
 -- deliberately non-modal, and user bindings (e.g. the Autocomplete
 -- binding) must keep reaching their actions.
 local sessionKeys = {
+	-- tcell names the escape key "Esc"; both accepted
 	Escape = function()
+		dismiss()
+		return false
+	end,
+	Esc = function()
 		dismiss()
 		return false
 	end,
