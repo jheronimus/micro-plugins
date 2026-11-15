@@ -9,11 +9,11 @@
 --       MarkedString, MarkedString[], and a plain string (LSP 3.x
 --       legacy). The kind decides how renderMarkdown is applied.
 --   renderMarkdown(text, width) -> lines
---       renders markdown to a list of entries for overlaybox. Every
+--       renders markdown to a list of entries for float. Every
 --       entry has .text; single-styled lines carry bold/italic/strike/
 --       color, and wrapped prose lines carry .segments with per-word
 --       styling. Lines are pre-wrapped to width so hanging indents
---       survive overlaybox's re-wrap.
+--       survive float's re-wrap.
 --
 -- Rendered subset: ATX and setext headings, fenced and indented code,
 -- bullet and ordered lists (with nesting and task markers), block

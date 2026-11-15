@@ -1,0 +1,15 @@
+[{
+  "Name": "complete",
+  "Description": "Completion engine for Micro plugins: session lifecycle (auto-insert, cycle, accept, revert) with the menu drawn by float",
+  "Tags": ["completion", "ui"],
+  "Website": "https://github.com/jheronimus/micro-plugins",
+  "Versions": [
+    {
+      "Version": "0.1.0",
+      "Url": "https://github.com/jheronimus/micro-plugins/releases/download/latest/complete.zip",
+      "Require": {
+        "micro": ">=2.0.17"
+      }
+    }
+  ]
+}]

@@ -1,26 +1,33 @@
-VERSION = "0.1.0"
+VERSION = "0.2.0"
 
--- overlaybox: a boxed overlay widget for Micro plugins, built on the
--- micro/overlay immediate-mode API (upstream PR #3733). Provides the
--- floating-box UX (word wrap, border, title, scrollbar, active item,
--- keyboard cycling, mouse wheel scrolling, auto-dismiss) that the raw
--- API deliberately leaves to the plugin side.
+-- float: a floating window primitive for Micro plugins, built on the
+-- micro/overlay immediate-mode API (upstream PR #3733). Anything that
+-- needs a floating window — menus, documentation popups, completion
+-- lists — draws through this plugin. It provides the window UX (word
+-- wrap, border, title, scrollbar, active item, mouse wheel scrolling,
+-- auto-dismiss) that the raw API deliberately leaves to the plugin side.
 --
 -- API (called from other plugins via the shared global table):
---   overlaybox.show(opts)  opts = { anchor = "top-right"|"cursor"|"center",
+--   float.show(opts)  opts = { anchor = "top-right"|"cursor"|"center",
 --       title, lines = {...} or content = "text", width, maxHeight,
---       border = true, autoclose = true, activeItem = nil|0,
+--       border = true, autoclose = true, raw = false, activeItem = nil|0,
 --       onAccept = fn(idx), onSelect = fn(idx), onClose = fn()
 --       (idx in activeItem/onAccept/onSelect is a 0-based index into the
 --       caller's lines, not the wrapped display lines)
---   overlaybox.hide()
---   overlaybox.isActive()
---   overlaybox.cycle(delta)   -- move active item (Tab handlers etc.)
---   overlaybox.scroll(delta)
+--   float.hide()
+--   float.isActive()
+--   float.cycle(delta)   -- move active item (Tab handlers etc.)
+--   float.scroll(delta)
 --
--- While a box is open, the plugin's pre<Action> hooks block the keys it
--- consumes (cycling, accept, scroll, escape) and close the box on other
--- keys when autoclose is set, letting the key pass through.
+-- Two modes:
+--   menu mode (default): the plugin's pre<Action> hooks block the keys
+--       it consumes (cycling, accept, scroll, escape) and close the box
+--       on other keys when autoclose is set, letting the key pass
+--       through. For simple consumers — menus, popups.
+--   raw mode (opts.raw): all key hooks are inert — the caller owns the
+--       keyboard and drives cycle/scroll/accept/hide itself. For
+--       engines, like the complete plugin, that implement their own key
+--       semantics on top of the window.
 
 local micro = import("micro")
 -- micro/overlay only exists in editors carrying the overlay API (the fork
@@ -352,6 +359,7 @@ function show(opts)
 		border = opts.border ~= false,
 		activeItem = opts.activeItem,
 		autoclose = opts.autoclose ~= false,
+		raw = opts.raw == true,
 		onAccept = opts.onAccept,
 		onSelect = opts.onSelect,
 		onClose = opts.onClose,
@@ -382,6 +390,17 @@ end
 
 function isActive()
 	return box ~= nil
+end
+
+-- whether the editor carries the overlay API at all; engines that need a
+-- visible window should degrade when it is false
+function available()
+	return overlayOk
+end
+
+-- whether a mouse event landed inside the window (menu scrolling)
+function containsMouse(te)
+	return mouseInside(te)
 end
 
 -- cycle/accept/onSelect/onAccept all deal in source-item indices (0-based),
@@ -416,8 +435,13 @@ function accept()
 end
 
 -- Keyboard hooks: consume the keys a box needs, dismiss on the rest.
+-- In raw mode every hook is inert — the caller owns the keyboard.
+local function hooksActive()
+	return box ~= nil and not box.raw
+end
+
 function preEscape()
-	if box == nil then
+	if not hooksActive() then
 		return
 	end
 	hide()
@@ -425,7 +449,7 @@ function preEscape()
 end
 
 function preCursorUp()
-	if box == nil then
+	if not hooksActive() then
 		return
 	end
 	if box.activeItem ~= nil then
@@ -438,7 +462,7 @@ function preCursorUp()
 end
 
 function preCursorDown()
-	if box == nil then
+	if not hooksActive() then
 		return
 	end
 	if box.activeItem ~= nil then
@@ -451,7 +475,7 @@ function preCursorDown()
 end
 
 function preInsertNewline()
-	if box == nil then
+	if not hooksActive() then
 		return
 	end
 	if box.activeItem ~= nil then
@@ -464,7 +488,7 @@ function preInsertNewline()
 end
 
 local function dismissOnKey()
-	if box ~= nil and box.autoclose then
+	if hooksActive() and box.autoclose then
 		hide()
 	end
 end
@@ -490,7 +514,7 @@ function preRune()
 end
 
 function prePageUp()
-	if box == nil then
+	if not hooksActive() then
 		return
 	end
 	scroll(-PAGE_STEP)
@@ -498,7 +522,7 @@ function prePageUp()
 end
 
 function prePageDown()
-	if box == nil then
+	if not hooksActive() then
 		return
 	end
 	scroll(PAGE_STEP)
@@ -509,7 +533,7 @@ end
 -- bufpane, and te is nil when the action was triggered by a key binding
 -- instead of the mouse
 function preScrollUp(bp, te)
-	if box == nil or not mouseInside(te) then
+	if not hooksActive() or not mouseInside(te) then
 		return
 	end
 	scroll(-SCROLL_STEP)
@@ -517,7 +541,7 @@ function preScrollUp(bp, te)
 end
 
 function preScrollDown(bp, te)
-	if box == nil or not mouseInside(te) then
+	if not hooksActive() or not mouseInside(te) then
 		return
 	end
 	scroll(SCROLL_STEP)
@@ -526,7 +550,7 @@ end
 
 function init()
 	if not overlayOk then
-		micro.Log("overlaybox: editor has no micro/overlay API, plugin disabled")
+		micro.Log("float: editor has no micro/overlay API, plugin disabled")
 		return
 	end
 	handle = overlay.CreateOverlay(draw)

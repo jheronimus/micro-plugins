@@ -43,7 +43,7 @@ local function applyCodeAction(bp, action)
 end
 
 local function showCodeActionMenu(bp, results)
-	if overlaybox == nil then
+	if float == nil then
 		micro.InfoBar():Message(results[1].title or "Code action available")
 		applyCodeAction(bp, results[1])
 		return
@@ -52,7 +52,7 @@ local function showCodeActionMenu(bp, results)
 	for idx, act in ipairs(results) do
 		lines[#lines + 1] = string.format("%d. %s", idx, act.title or ("Action " .. idx))
 	end
-	overlaybox.show({
+	float.show({
 		anchor = "cursor",
 		title = "Code Actions",
 		lines = lines,

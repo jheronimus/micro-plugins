@@ -2,8 +2,8 @@ local micro = import("micro")
 local fmt = import("fmt")
 
 -- Hover popup geometry: render.lua pre-wraps content to HOVER_TEXT_WIDTH,
--- which equals overlaybox's inner width (+4 converts it to the outer
--- width, matching overlaybox's border+padding).
+-- which equals float's inner width (+4 converts it to the outer
+-- width, matching float's border+padding).
 local HOVER_TEXT_WIDTH = 72
 local HOVER_MAX_HEIGHT = 28
 
@@ -38,12 +38,12 @@ function hoverActionResponse(bp, data)
 		return
 	end
 	-- plaintext is shown as-is; markdown needs the popup renderer, and
-	-- without overlaybox there is nothing to render lines into
-	if contents.kind == "plaintext" or overlaybox == nil then
+	-- without float there is nothing to render lines into
+	if contents.kind == "plaintext" or float == nil then
 		micro.InfoBar():Message(contents.text)
 		return
 	end
-	overlaybox.show({
+	float.show({
 		anchor = "top-right",
 		title = "Documentation",
 		lines = renderMarkdown(contents.text, HOVER_TEXT_WIDTH),

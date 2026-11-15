@@ -8,9 +8,11 @@ This help page can be viewed in Micro editor with Ctrl-E 'help lsp'
 
 ## Features and Shortcuts
 
-- Completion with an selectable candidate popup (ctrl-space or automatic on
-  trigger characters) (textDocument/completion); the selected candidate's
-  detail is shown in the status bar, its documentation is fetched lazily via
+- Completion with a selectable candidate popup (automatic on trigger
+  characters, ctrl-space to request) (textDocument/completion). Tab /
+  arrow keys cycle, Enter accepts, Esc dismisses (reverting the
+  auto-inserted candidate). The selected candidate's detail is shown in
+  the status bar, its documentation is fetched lazily via
   completionItem/resolve
 - Hover documentation in a popup window (alt-K) (textDocument/hover)
 - Open function definition in a new tab (alt-D) (textDocument/definition)
@@ -27,9 +29,9 @@ This help page can be viewed in Micro editor with Ctrl-E 'help lsp'
   line (disable with "lsp.inlineDiagnostics": false); the message for the
   cursor line is shown in the status bar
 
-Popups (completion, hover, code actions, signatures) are rendered with the
-overlaybox plugin; on editors without the micro/overlay API the plugin falls
-back to the status bar.
+Popups are rendered with the float plugin, and completion sessions run
+through the complete plugin; on editors without the micro/overlay API
+both fall back to the status bar.
 
 ## Options
 

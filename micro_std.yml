@@ -46,7 +46,9 @@ globals:
     any: true
   drawInlineDiagnostics:
     any: true
-  overlaybox:
+  float:
+    any: true
+  complete:
     any: true
   encodeJson:
     any: true

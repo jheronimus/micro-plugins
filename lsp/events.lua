@@ -611,7 +611,7 @@ function onAnyEvent()
 		return
 	end
 
-	if overlaybox ~= nil and overlaybox.isActive() then
+	if float ~= nil and float.isActive() then
 		-- completion menu is open: surface the selected item's detail and
 		-- documentation. Messages set while an action runs are cleared by
 		-- the action pipeline; onAnyEvent runs after it, so its message

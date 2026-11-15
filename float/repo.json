@@ -1,0 +1,15 @@
+[{
+  "Name": "float",
+  "Description": "Floating window primitive on the micro/overlay API: wrapping, border, title, scrollbar, menu or raw mode",
+  "Tags": ["overlay", "ui"],
+  "Website": "https://github.com/jheronimus/micro-plugins",
+  "Versions": [
+    {
+      "Version": "0.2.0",
+      "Url": "https://github.com/jheronimus/micro-plugins/releases/download/latest/float.zip",
+      "Require": {
+        "micro": ">=2.0.17"
+      }
+    }
+  ]
+}]

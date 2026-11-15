@@ -3,10 +3,8 @@ local util = import("micro/util")
 local buffer = import("micro/buffer")
 local fmt = import("fmt")
 
--- currentResults/completionStart/lastSelectedEntry are shared with
--- events.lua (onAnyEvent reads lastSelectedEntry) and overlaybox callbacks.
-local currentResults = nil
-local completionStart = nil
+-- lastSelectedEntry is shared with events.lua (onAnyEvent surfaces the
+-- selected candidate's detail through it)
 lastSelectedEntry = nil
 
 local function getEntryText(entry)
@@ -53,16 +51,10 @@ local function requestCompletion(bp, filetype, file, line, char)
 	)
 end
 
-local function isCycling(bp, auto)
-	return not auto and overlaybox ~= nil and overlaybox.isActive() and currentResults ~= nil
-end
-
 function completionAction(bp, auto)
 	local filetype = bp.Buf:FileType()
-	local cursor = bp.Buf:GetActiveCursor()
-
-	if isCycling(bp, auto) then
-		overlaybox.cycle(1)
+	if complete.isActive() then
+		complete.cycle(1)
 		return
 	end
 
@@ -70,21 +62,18 @@ function completionAction(bp, auto)
 		if cmd[filetype] == nil then
 			return
 		end
-		if overlaybox ~= nil and overlaybox.isActive() then
-			overlaybox.hide()
-		end
-		requestCompletion(bp, filetype, bp.Buf.AbsPath, cursor.Y, cursor.X)
+		requestCompletion(bp, filetype, bp.Buf.AbsPath, bp.Buf:GetActiveCursor().Y, bp.Buf:GetActiveCursor().X)
 		return
 	end
 
-	if shouldIndent(bp, cursor.X, cursor.Y) then
+	if shouldIndent(bp, bp.Cursor.X, bp.Cursor.Y) then
 		return
 	end
 	if cmd[filetype] == nil then
 		bp:InsertTab()
 		return
 	end
-	requestCompletion(bp, filetype, bp.Buf.AbsPath, cursor.Y, cursor.X)
+	requestCompletion(bp, filetype, bp.Buf.AbsPath, bp.Buf:GetActiveCursor().Y, bp.Buf:GetActiveCursor().X)
 end
 
 local function getTriggerChars(filetype)
@@ -95,113 +84,88 @@ local function getTriggerChars(filetype)
 	return nil
 end
 
+-- find the typed prefix ending at the cursor, split at the last trigger
+-- or delimiter character; returns (prefix, rangeStart, found)
 local function findPrefixByTriggers(bp, xy, triggerChars)
-	local cur = bp.Buf:GetActiveCursor()
-	cur:SelectLine()
-	local lineContent = util.String(cur:GetSelection())
-	local reversed = string.reverse(lineContent:gsub("\r?\n$", ""):sub(1, xy.X))
+	local cursor = bp.Buf:GetActiveCursor()
+	cursor:SelectLine()
+	local lineContent = util.String(cursor:GetSelection())
+	cursor:ResetSelection()
+	local trimmed = lineContent:gsub("\r?\n$", "")
+	local reversed = string.reverse(trimmed:sub(1, xy.X))
 	local delimChars = { " ", ":", "/", "-", "\t", ";" }
 	for i = 1, #reversed do
 		local char = reversed:sub(i, i)
 		if contains(triggerChars, char) or contains(delimChars, char) then
-			local start = buffer.Loc(#reversed - (i - 1), bp.Cursor.Y)
-			bp.Cursor:SetSelectionStart(start)
-			bp.Cursor:SetSelectionEnd(xy)
-			local prefix = util.String(cur:GetSelection())
-			bp.Cursor:DeleteSelection()
-			bp.Cursor:ResetSelection()
-			return prefix, start, reversed, true
+			return trimmed:sub(#reversed - (i - 1) + 1), buffer.Loc(#reversed - (i - 1), bp.Cursor.Y), true
 		end
 	end
-	return lineContent:gsub("\r?\n$", ""), xy, reversed, false
+	return trimmed, xy, false
 end
 
-local function resolvePrefixAndRangeWithoutEdit(bp, xy, results)
-	local prefix = ""
-	local start = xy
-	local reversed = ""
-	local found = false
-	local triggerChars = getTriggerChars(bp.Buf:FileType())
-	if triggerChars then
-		prefix, start, reversed, found = findPrefixByTriggers(bp, xy, triggerChars)
+-- compute where the completion session's replace range starts: an
+-- explicit textEdit.range wins; otherwise the typed prefix (including
+-- trigger and delimiter characters) is the range, and candidates are
+-- filtered by it. Returns (rangeStart, filteredResults).
+local function sessionRange(bp, results)
+	local cursor = bp.Buf:GetActiveCursor()
+	local xy = buffer.Loc(cursor.X, cursor.Y)
+	local entry = results[1]
+	if entry ~= nil and entry.textEdit ~= nil and entry.textEdit.range ~= nil then
+		return buffer.Loc(entry.textEdit.range.start.character, entry.textEdit.range.start.line), results
 	end
+	local triggerChars = getTriggerChars(bp.Buf:FileType())
+	if triggerChars == nil then
+		return xy, results
+	end
+	local prefix, start, found = findPrefixByTriggers(bp, xy, triggerChars)
 	if prefix ~= "" then
 		results = table.filter(results, function(e)
 			return e.label:starts(prefix)
 		end)
 	end
-	return prefix, start, reversed, found, results
-end
-
-local function applySelectionRange(bp, start, xy)
-	bp.Cursor:SetSelectionStart(start)
-	bp.Cursor:SetSelectionEnd(xy)
-	bp.Cursor:DeleteSelection()
-	bp.Cursor:ResetSelection()
-end
-
-local function resolveFallbackStart(reversed, cursorY)
-	if reversed:starts(" ") or reversed:starts("\t") then
-		return buffer.Loc(#reversed, cursorY)
+	if not found and prefix ~= "" then
+		start = buffer.Loc(xy.X - util.CharacterCountInString(prefix), xy.Y)
 	end
-	return buffer.Loc(0, cursorY)
+	return start, results
 end
 
-local function resolveRangeWithEdit(bp, xy, entry, reversed, found)
-	if entry and entry.textEdit and entry.textEdit.range then
-		local start = buffer.Loc(entry.textEdit.range.start.character, entry.textEdit.range.start.line)
-		applySelectionRange(bp, start, xy)
-		return start
-	end
-	local triggerChars = getTriggerChars(bp.Buf:FileType())
-	if triggerChars and not found then
-		local start = resolveFallbackStart(reversed, bp.Cursor.Y)
-		applySelectionRange(bp, start, xy)
-		return start
-	end
-	return xy
-end
-
-local function deletePrefix(bp, prefix)
-	if #prefix > 0 then
-		local xy = buffer.Loc(bp.Cursor.X, bp.Cursor.Y)
-		local nstart = buffer.Loc(bp.Cursor.X - #prefix, bp.Cursor.Y)
-		bp.Cursor:GotoLoc(nstart)
-		bp.Cursor:SetSelectionStart(nstart)
-		bp.Cursor:SetSelectionEnd(xy)
-		bp.Cursor:DeleteSelection()
-	end
-end
-
-local function advanceLoc(loc, text)
-	local parts = {}
-	for seg in (text .. "\n"):gmatch("(.-)\n") do
-		parts[#parts + 1] = seg
-	end
-	local lineCount = #parts - 1
-	local lastLen = util.CharacterCountInString(parts[#parts])
-	if lineCount == 0 then
-		return buffer.Loc(loc.X + lastLen, loc.Y)
-	end
-	return buffer.Loc(lastLen, loc.Y + lineCount)
-end
-
-local function insertCompletion(bp, loc, text)
-	bp.Buf:Insert(loc, text)
-	bp.Cursor:GotoLoc(advanceLoc(loc, text))
-end
-
-local function replaceInserted(bp, entry)
-	if completionStart == nil then
+local function startSession(bp, results)
+	local rangeStart, filtered = sessionRange(bp, results)
+	if #filtered == 0 then
 		return
 	end
-	local cur = bp.Buf:GetActiveCursor()
-	local endLoc = buffer.Loc(cur.X, cur.Y)
-	cur:SetSelectionStart(completionStart)
-	cur:SetSelectionEnd(endLoc)
-	cur:DeleteSelection()
-	cur:ResetSelection()
-	insertCompletion(bp, completionStart, getEntryText(entry))
+	local items = {}
+	for _, e in ipairs(filtered) do
+		items[#items + 1] = {
+			label = completionLabel(e),
+			insertText = getEntryText(e),
+			detail = e.detail,
+			entry = e,
+		}
+	end
+	complete.start(bp, {
+		range = { start = rangeStart, ["end"] = buffer.Loc(bp.Cursor.X, bp.Cursor.Y) },
+		items = items,
+		onAccept = function(item)
+			if item.entry ~= nil and item.entry.additionalTextEdits then
+				applyEditsToBuffer(bp, item.entry.additionalTextEdits)
+			end
+		end,
+		onSelect = function(item)
+			lastSelectedEntry = item.entry
+			if item.entry ~= nil and item.entry.documentation == nil and cmd[bp.Buf:FileType()] ~= nil then
+				requestResolve(bp, bp.Buf:FileType(), item.entry)
+			end
+		end,
+		onClose = function()
+			lastSelectedEntry = nil
+		end,
+	})
+	if complete.isActive() then
+		showCompletionDetails(items[1].entry)
+		lastSelectedEntry = items[1].entry
+	end
 end
 
 local function docExcerpt(entry, count)
@@ -229,55 +193,6 @@ function showCompletionDetails(entry)
 	end
 end
 
-local function applyEntry(bp, idx)
-	local entry = currentResults and currentResults[idx + 1]
-	if entry == nil or idx == 0 then
-		return
-	end
-	replaceInserted(bp, entry)
-	if entry.additionalTextEdits then
-		applyEditsToBuffer(bp, entry.additionalTextEdits)
-	end
-end
-
-local function startCompletion(bp, results)
-	local xy = buffer.Loc(bp.Cursor.X, bp.Cursor.Y)
-	local start = xy
-	local reversed = ""
-	local found = false
-	local entry = results[1]
-
-	local hasRange = entry and entry.textEdit and entry.textEdit.range
-	if not hasRange then
-		local prefix
-		prefix, start, reversed, found, results = resolvePrefixAndRangeWithoutEdit(bp, xy, results)
-		-- findPrefixByTriggers already deleted the prefix when it matched a
-		-- trigger character; only the untriggered prefix is still in-buffer
-		if not found then
-			deletePrefix(bp, prefix)
-		end
-	else
-		start = resolveRangeWithEdit(bp, xy, entry, reversed, found)
-	end
-	entry = results[1]
-	if entry == nil then
-		-- every candidate was filtered out by the prefix match
-		return
-	end
-
-	local text = getEntryText(entry)
-	insertCompletion(bp, start, text)
-	completionStart = start
-	if entry.additionalTextEdits then
-		applyEditsToBuffer(bp, entry.additionalTextEdits)
-	end
-
-	showCompletionDetails(entry)
-	if overlaybox ~= nil and #results > 1 then
-		showCompletionMenu(bp, bp.Buf:FileType(), results)
-	end
-end
-
 function completionLabel(e)
 	local detail = e.detail
 	if detail == nil and e.labelDetails ~= nil then
@@ -287,36 +202,6 @@ function completionLabel(e)
 		return e.label .. "  " .. detail
 	end
 	return e.label
-end
-
-function showCompletionMenu(bp, filetype, results)
-	local labels = {}
-	for _, e in ipairs(results) do
-		labels[#labels + 1] = completionLabel(e)
-	end
-	overlaybox.show({
-		anchor = "cursor",
-		lines = labels,
-		activeItem = 0,
-		onSelect = function(idx)
-			if currentResults == nil then
-				return
-			end
-			local selected = currentResults[idx + 1]
-			lastSelectedEntry = selected
-			if selected ~= nil and selected.documentation == nil and cmd[filetype] ~= nil then
-				requestResolve(bp, filetype, selected)
-			end
-		end,
-		onAccept = function(idx)
-			applyEntry(bp, idx)
-		end,
-		onClose = function()
-			currentResults = nil
-			completionStart = nil
-			lastSelectedEntry = nil
-		end,
-	})
 end
 
 function firstLines(entries, count)
@@ -359,9 +244,8 @@ function completionActionResponse(bp, data)
 		return (left.sortText or left.label) < (right.sortText or right.label)
 	end)
 
-	currentResults = results
 	if #results == 0 then
 		return
 	end
-	startCompletion(bp, results)
+	startSession(bp, results)
 end

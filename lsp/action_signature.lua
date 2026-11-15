@@ -58,7 +58,7 @@ local function resolveActiveSignature(res)
 end
 
 local function displaySignature(msg, sig)
-	if overlaybox == nil then
+	if float == nil then
 		micro.InfoBar():Message(msg)
 		return
 	end
@@ -67,7 +67,7 @@ local function displaySignature(msg, sig)
 	if doc then
 		content = content .. "\n\n" .. doc
 	end
-	overlaybox.show({
+	float.show({
 		anchor = "cursor",
 		content = content,
 		border = true,
