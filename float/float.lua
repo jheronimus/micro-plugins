@@ -16,6 +16,7 @@ VERSION = "0.2.0"
 --       caller's lines, not the wrapped display lines)
 --   float.hide()
 --   float.isActive()
+--   float.rect()         -- current window rect or nil (for other overlays)
 --   float.cycle(delta)   -- move active item (Tab handlers etc.)
 --   float.scroll(delta)
 --
@@ -287,13 +288,18 @@ local function styleForEntry(entry)
 	return style
 end
 
-local function drawSegments(entry, x, y, maxWidth, active)
+local function drawSegments(entry, startX, y, maxWidth, active)
+	local x = startX
 	for _, seg in ipairs(entry.segments) do
 		local style = styleForEntry(seg)
 		if active then
 			style = style:Reverse(true)
 		end
-		overlay.DrawText(seg.text, x, y, maxWidth, 1, style)
+		-- DrawText fills its whole width with the style background, so the
+		-- fill must end at the inner edge: a full-width fill per segment
+		-- would paint a band past the window border (and each later
+		-- segment's fill would still erase nothing left of its own x)
+		overlay.DrawText(seg.text, x, y, maxWidth - (x - startX), 1, style)
 		x = x + runeLen(seg.text)
 	end
 end
@@ -440,6 +446,16 @@ function containsMouse(te)
 	return mouseInside(te)
 end
 
+-- current window rect in screen coordinates, or nil when no window is
+-- open; lets other overlays (e.g. lsp inline diagnostics) avoid painting
+-- over the window
+function rect()
+	if box == nil or box.rect == nil then
+		return nil
+	end
+	return box.rect
+end
+
 -- cycle/accept/onSelect/onAccept all deal in source-item indices (0-based),
 -- matching what callers pass in opts.activeItem — not wrapped-line indices.
 function cycle(delta)
@@ -483,6 +499,17 @@ function preEscape()
 	end
 	hide()
 	return false
+end
+
+-- a click outside the window dismisses it (menu mode) and the click
+-- passes through to the buffer
+function preMousePress(bp, te)
+	if not hooksActive() or te == nil then
+		return
+	end
+	if box.autoclose and not mouseInside(te) then
+		hide()
+	end
 end
 
 function preCursorUp()
