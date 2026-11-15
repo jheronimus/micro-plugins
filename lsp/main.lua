@@ -188,6 +188,7 @@ function handleInitialized(buf, filetype)
 	micro.Log("Found running lsp server for ", filetype, "firing textDocument/didOpen...")
 	local send = withSend(filetype)
 	version[uri] = 1
+	version[normalizeUri(uri)] = 1
 	docFiletype[uri] = filetype
 	local content = jsonEscape(util.String(buf:Bytes()))
 	send(

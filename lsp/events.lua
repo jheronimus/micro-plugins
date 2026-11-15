@@ -27,12 +27,14 @@ local function sendDocumentChange(bp, filetype)
 	local uri = getUriFromBuf(bp.Buf)
 	local content = jsonEscape(util.String(bp.Buf:Bytes()))
 	-- increase change version
-	version[uri] = (version[uri] or 0) + 1
+	local nextVer = (version[uri] or version[normalizeUri(uri)] or 0) + 1
+	version[uri] = nextVer
+	version[normalizeUri(uri)] = nextVer
 	send(
 		"textDocument/didChange",
 		fmt.Sprintf(
 			'{"textDocument": {"version": %.0f, "uri": "%s"}, "contentChanges": [{"text": "%s"}]}',
-			version[uri],
+			nextVer,
 			uri,
 			content
 		),
@@ -71,18 +73,24 @@ end
 
 -- didChange notifications are debounced: mark the buffer dirty and send
 -- its current text once after the editor has been idle for a moment
--- (Neovim's debounce_text_changes default is 150ms)
-local changePending = {}
+-- (Neovim's debounce_text_changes default is 150ms).
+-- micro.After takes a time.Duration in nanoseconds (150ms = 150 * 1000 * 1000ns).
+local DEBOUNCE_NS = 150 * 1000 * 1000
+local changeSeq = {}
 
 local function scheduleDocumentChange(bp, filetype)
-	if changePending[filetype] then
-		return
-	end
-	changePending[filetype] = true
-	micro.After(150, function()
-		changePending[filetype] = nil
-		if cmd[filetype] ~= nil and bp ~= nil and bp.Buf ~= nil then
-			sendDocumentChange(bp, filetype)
+	local seq = (changeSeq[filetype] or 0) + 1
+	changeSeq[filetype] = seq
+	local curBp = bp
+	micro.After(DEBOUNCE_NS, function()
+		if changeSeq[filetype] == seq then
+			local pane = curBp
+			if pane == nil or pane.Buf == nil then
+				pane = micro.CurPane()
+			end
+			if cmd[filetype] ~= nil and pane ~= nil and pane.Buf ~= nil then
+				sendDocumentChange(pane, filetype)
+			end
 		end
 	end)
 end
@@ -90,7 +98,7 @@ end
 -- send any pending document text right away; used before requests that
 -- must observe the current buffer (completion, signature help)
 function flushDocumentChange(bp, filetype)
-	changePending[filetype] = nil
+	changeSeq[filetype] = (changeSeq[filetype] or 0) + 1
 	if cmd[filetype] ~= nil and bp ~= nil and bp.Buf ~= nil then
 		sendDocumentChange(bp, filetype)
 	end
@@ -331,7 +339,8 @@ end
 local function isOutdatedDiagnostic(data)
 	local docVersion = data.params.version
 	local targetUri = data.params.uri
-	return docVersion ~= nil and version[targetUri] ~= nil and docVersion < version[targetUri]
+	local curVer = version[targetUri] or version[normalizeUri(targetUri)]
+	return docVersion ~= nil and curVer ~= nil and docVersion < curVer
 end
 
 local function updateBufferDiagnostics(buf, diagnostics)
@@ -339,6 +348,24 @@ local function updateBufferDiagnostics(buf, diagnostics)
 	for _, diagnostic in ipairs(diagnostics or {}) do
 		applyDiagnosticMessage(buf, diagnostic)
 	end
+end
+
+local function redrawOverlay()
+	if overlayOk and overlay ~= nil and overlay.Redraw ~= nil then
+		overlay.Redraw()
+	end
+end
+
+local function targetBuffers(uri, normUri)
+	local bufs = findBuffersByUri(uri)
+	if #bufs > 0 then
+		return bufs
+	end
+	local cur = micro.CurPane()
+	if cur ~= nil and cur.Buf ~= nil and normUri == cur.Buf.AbsPath then
+		return { cur.Buf }
+	end
+	return bufs
 end
 
 local function handlePublishDiagnostics(data)
@@ -349,17 +376,14 @@ local function handlePublishDiagnostics(data)
 		micro.Log("Dropping outdated diagnostics for", data.params.uri)
 		return
 	end
-	rawDiagnostics[normalizeUri(data.params.uri)] = data.params.diagnostics or {}
-	local bufs = findBuffersByUri(data.params.uri)
-	if #bufs == 0 and micro.CurPane() ~= nil and micro.CurPane().Buf ~= nil then
-		local curBuf = micro.CurPane().Buf
-		if normalizeUri(data.params.uri) == curBuf.AbsPath then
-			table.insert(bufs, curBuf)
-		end
+	local normUri = normalizeUri(data.params.uri)
+	local diags = data.params.diagnostics or {}
+	rawDiagnostics[normUri] = diags
+	rawDiagnostics[data.params.uri] = diags
+	for _, buf in ipairs(targetBuffers(data.params.uri, normUri)) do
+		updateBufferDiagnostics(buf, diags)
 	end
-	for _, buf in ipairs(bufs) do
-		updateBufferDiagnostics(buf, data.params.diagnostics)
-	end
+	redrawOverlay()
 end
 
 local function handleWindowShowMessage(filetype, data)

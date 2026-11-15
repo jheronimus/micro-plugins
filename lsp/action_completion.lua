@@ -157,6 +157,7 @@ local function startSession(bp, results)
 			if item.entry ~= nil and item.entry.additionalTextEdits then
 				applyEditsToBuffer(bp, item.entry.additionalTextEdits)
 			end
+			flushDocumentChange(bp, bp.Buf:FileType())
 		end,
 		onSelect = function(item)
 			lastSelectedEntry = item.entry
@@ -166,6 +167,7 @@ local function startSession(bp, results)
 		end,
 		onClose = function()
 			lastSelectedEntry = nil
+			flushDocumentChange(bp, bp.Buf:FileType())
 		end,
 	})
 	if complete.isActive() then

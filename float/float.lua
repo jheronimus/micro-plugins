@@ -197,7 +197,7 @@ local function position()
 		local bp = micro.CurPane()
 		local cx, cy = sw - box.w - 1, 1
 		if bp ~= nil and bp.Buf ~= nil then
-			local curLoc = bp.Buf:GetActiveCursor().Loc
+			local curLoc = box.loc or bp.Buf:GetActiveCursor().Loc
 			local sl = bp:ScreenLoc(buffer.Loc(curLoc.X, curLoc.Y))
 			cx, cy = sl.X, sl.Y + 1
 			if cy + box.h >= sh - 1 then
@@ -353,10 +353,11 @@ local lastRect = nil
 
 local function clearRect(r)
 	if r ~= nil then
-		-- paint with the terminal default: rows below the buffer's end are
-		-- never repainted by micro, so abandoned cells must return to the
-		-- untouched look; in-view cells are repainted by the next Display
-		overlay.DrawRect(r.x, r.y, r.w, r.h, overlay.Style())
+		-- paint with the theme default background: rows below the buffer's end
+		-- are never repainted by micro, so abandoned cells must blend with the
+		-- buffer look; in-view cells are repainted by the next Display
+		local bgStyle = overlay.GetColor("default")
+		overlay.DrawRect(r.x, r.y, r.w, r.h, bgStyle)
 	end
 end
 
@@ -431,6 +432,7 @@ function show(opts)
 		onSelect = opts.onSelect,
 		onClose = opts.onClose,
 		anchor = opts.anchor or "top-right",
+		loc = opts.loc,
 		scrollY = 0,
 		source = {},
 	}
@@ -447,6 +449,9 @@ function hide()
 	box = nil
 	clearRect(lastRect)
 	lastRect = nil
+	if overlayOk and overlay.Redraw ~= nil then
+		overlay.Redraw()
+	end
 end
 
 function isActive()

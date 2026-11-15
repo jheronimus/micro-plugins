@@ -102,6 +102,7 @@ function start(bp, spec)
 		end
 		float.show({
 			anchor = "cursor",
+			loc = session.range.start,
 			lines = labels,
 			activeItem = 0,
 			raw = true,
