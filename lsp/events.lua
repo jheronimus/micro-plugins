@@ -196,22 +196,46 @@ function onAutocomplete(bp)
 	onRune(bp)
 end
 
+-- in the references results buffer, Enter opens the location stored for
+-- the cursor row (no text parsing); on non-location rows Enter inserts
+-- normally. Typing dismisses the results view (upstream behavior): inside
+-- the buffer the key is blocked (editing rows would desync the stored
+-- locations), elsewhere it passes through after the view closes
+function inReferencesBuffer(bp)
+	if referenceState == nil then
+		return false
+	end
+	return bp.Buf.Name == referenceState.name or bp.Buf.Path == referenceState.name
+end
+
 function preInsertNewline(bp)
-	if bp.Buf.Path == "References found" then
-		local cur = bp.Buf:GetActiveCursor()
-		cur:SelectLine()
-		local data = util.String(cur:GetSelection())
-		local file, line, character = data:match("(./[^:]+):([^:]+):([^:]+)")
-		if not file then
-			return false
-		end
-		local doc, _ = file:gsub("^file://", "")
-		local buf, _ = buffer.NewBufferFromFile(doc)
-		bp:AddTab()
-		micro.CurPane():OpenBuffer(buf)
-		local lineText = util.String(buf:LineBytes(line * 1))
-		buf:GetActiveCursor():GotoLoc(buffer.Loc(runeColumn(lineText, character * 1), line * 1))
-		micro.CurPane():Center()
+	if not inReferencesBuffer(bp) then
+		return
+	end
+	local loc = referenceState.locs[bp.Buf:GetActiveCursor().Y + 1]
+	if loc == nil then
+		return
+	end
+	local buf, _ = buffer.NewBufferFromFile(loc.path)
+	bp:AddTab()
+	micro.CurPane():OpenBuffer(buf)
+	local lineText = util.String(buf:LineBytes(loc.line))
+	buf:GetActiveCursor():GotoLoc(buffer.Loc(runeColumn(lineText, loc.char), loc.line))
+	micro.CurPane():Center()
+	return false
+end
+
+function preRune(bp, r)
+	if referenceState ~= nil then
+		local inResults = inReferencesBuffer(bp)
+		closeReferences()
+		return inResults and false or nil
+	end
+end
+
+function preEscape(bp)
+	if referenceState ~= nil then
+		closeReferences()
 		return false
 	end
 end
