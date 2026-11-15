@@ -304,10 +304,34 @@ local function drawSegments(entry, startX, y, maxWidth, active)
 	end
 end
 
+-- one visible wrapped line: styled segments or a plain styled row
+local function drawEntry(entry, x, y, active)
+	if active and not box.raw then
+		overlay.SetCursor(x, y)
+	end
+	if entry.segments ~= nil then
+		drawSegments(entry, x, y, box.innerW, active)
+		return
+	end
+	local style = styleForEntry(entry)
+	if active then
+		style = style:Reverse(true)
+	end
+	overlay.DrawText(entry.text, x, y, box.innerW, 1, style)
+end
+
 local function drawContent()
 	local r = box.rect
 	local startY = box.border and r.y + 1 or r.y
 	local startX = box.border and r.x + 1 or r.x
+	-- cursor policy: menus put the terminal cursor on the active item
+	-- (focus indicator, inverted cell in fake-cursor mode); windows
+	-- without an active item hide it — nothing can be typed under them
+	-- since every editing key dismisses; raw mode claims nothing so the
+	-- buffer cursor stays where the user is typing
+	if not box.raw then
+		overlay.SetCursor(-1, -1)
+	end
 	for i = 0, box.innerH - 1 do
 		local idx = box.scrollY + i + 1
 		if idx > box.totalLines then
@@ -317,15 +341,7 @@ local function drawContent()
 		-- activeItem is a source-item index; every wrapped line belonging
 		-- to that item is highlighted
 		local active = box.activeItem ~= nil and entry.srcIndex - 1 == box.activeItem
-		if entry.segments ~= nil then
-			drawSegments(entry, startX, startY + i, box.innerW, active)
-		else
-			local style = styleForEntry(entry)
-			if active then
-				style = style:Reverse(true)
-			end
-			overlay.DrawText(entry.text, startX, startY + i, box.innerW, 1, style)
-		end
+		drawEntry(entry, startX, startY + i, active)
 	end
 end
 
