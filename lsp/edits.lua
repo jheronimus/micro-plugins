@@ -88,6 +88,8 @@ function collectChanges(result)
 	return fileEdits
 end
 
+-- open a file not currently in the editor and apply its edits there; the
+-- buffer is left unsaved so the user reviews and saves (or discards)
 local function applyToOtherBuffer(bp, path, edits)
 	local otherBuf, err = buffer.NewBufferFromFile(path)
 	if err == nil then
@@ -95,12 +97,12 @@ local function applyToOtherBuffer(bp, path, edits)
 		local newPane = micro.CurPane()
 		newPane:OpenBuffer(otherBuf)
 		applyEditsToBuffer(newPane, edits)
-		newPane:Save()
 	end
 end
 
 function applyAllChanges(bp, fileEdits, label)
 	local totalFiles = 0
+	local otherFiles = 0
 	local currentPath = bp.Buf.AbsPath
 
 	for path, edits in pairs(fileEdits) do
@@ -110,11 +112,16 @@ function applyAllChanges(bp, fileEdits, label)
 			onRune(bp)
 		else
 			applyToOtherBuffer(bp, path, edits)
+			otherFiles = otherFiles + 1
 		end
 	end
 
 	if totalFiles > 0 then
-		micro.InfoBar():Message("Applied: " .. label)
+		local note = ""
+		if otherFiles > 0 then
+			note = " (" .. otherFiles .. " other file(s) opened unsaved)"
+		end
+		micro.InfoBar():Message("Applied: " .. label .. note)
 	else
 		micro.InfoBar():Message("No changes to apply")
 	end
