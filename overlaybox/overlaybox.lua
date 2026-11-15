@@ -220,9 +220,18 @@ end
 -- (sized to the visible/total ratio, the way VS Code and Neovim
 -- scrollbar plugins render it) drawn over the border in the comment
 -- color, only when the content actually overflows.
+-- The box owns its background: take only the foreground from a theme
+-- group. Themes (e.g. the default monokai) define groups like comment
+-- with a background, and DrawText fills its whole width with that
+-- background, which would paint a band across the row.
+local function groupStyle(name)
+	local fg = overlay.GetColor(name):Decompose()
+	return overlay.Style():Foreground(fg)
+end
+
 local function drawBorder()
 	local r = box.rect
-	local style = overlay.GetColor("divider")
+	local style = groupStyle("divider")
 	overlay.DrawText("┌" .. string.rep("─", r.w - 2) .. "┐", r.x, r.y, r.w, 1, style)
 	overlay.DrawText("└" .. string.rep("─", r.w - 2) .. "┘", r.x, r.y + r.h - 1, r.w, 1, style)
 	for row = 1, r.h - 2 do
@@ -236,7 +245,7 @@ local function drawBorder()
 	local trackH = r.h - 2
 	local thumbH = math.max(1, math.floor((trackH * box.innerH) / box.totalLines))
 	local thumbY = math.floor((box.scrollY * (trackH - thumbH)) / maxScroll)
-	local thumbStyle = overlay.GetColor("comment")
+	local thumbStyle = groupStyle("comment")
 	for i = 0, thumbH - 1 do
 		overlay.DrawText("▌", r.x + r.w - 1, r.y + 1 + thumbY + i, 1, 1, thumbStyle)
 	end
@@ -253,7 +262,7 @@ end
 local function styleForEntry(entry)
 	local style = overlay.Style()
 	if entry.color ~= nil then
-		style = overlay.GetColor(entry.color)
+		style = groupStyle(entry.color)
 	end
 	if entry.bold then
 		style = style:Bold(true)

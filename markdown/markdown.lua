@@ -141,9 +141,11 @@ local function matchRule(rawText, prevLineText)
 		return nil
 	end
 	local div = string.rep("─", RULE_WIDTH)
+	-- comment, not divider: most themes (e.g. monokai) don't define
+	-- divider, so it would fall back to a bright default foreground
 	return {
 		text = div,
-		spans = { { start = 0, length = RULE_WIDTH, color = "divider" } },
+		spans = { { start = 0, length = RULE_WIDTH, color = "comment" } },
 	}
 end
 

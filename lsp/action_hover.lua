@@ -37,7 +37,9 @@ local function classifyLine(trimmed, width)
 		return "entry", { text = flattenInline(title), bold = true }
 	end
 	if trimmed:match("^%-%-%-+$") or trimmed:match("^%*%*%*+$") then
-		return "entry", { text = string.rep("─", width), color = "divider" }
+		-- comment, not divider: most themes (e.g. monokai) don't define
+		-- divider, so it would fall back to a bright default foreground
+		return "entry", { text = string.rep("─", width), color = "comment" }
 	end
 	if trimmed:match("^[-*+]%s") or trimmed:match("^%d+%.%s") then
 		return "entry", flattenInline(trimmed)
