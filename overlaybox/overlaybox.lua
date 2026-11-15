@@ -215,20 +215,25 @@ local function clampScroll()
 	box.scrollY = math.max(math.min(box.scrollY, maxScroll), 0)
 end
 
+-- Minimal frame: horizontal rules top and bottom, no side borders. The
+-- right column holds a thumb-only scrollbar when the content overflows —
+-- a proportional thumb sized to the visible/total ratio and no track,
+-- the way VS Code and Neovim scrollbar plugins render it.
 local function drawBorder()
 	local r = box.rect
 	local style = overlay.GetColor("divider")
-	overlay.DrawText("┌" .. string.rep("─", r.w - 2) .. "┐", r.x, r.y, r.w, 1, style)
-	overlay.DrawText("└" .. string.rep("─", r.w - 2) .. "┘", r.x, r.y + r.h - 1, r.w, 1, style)
+	overlay.DrawText(string.rep("─", r.w), r.x, r.y, r.w, 1, style)
+	overlay.DrawText(string.rep("─", r.w), r.x, r.y + r.h - 1, r.w, 1, style)
 	local maxScroll = math.max(box.totalLines - box.innerH, 0)
-	for row = 1, r.h - 2 do
-		local glyph = "│"
-		if maxScroll > 0 then
-			local thumb = math.floor((box.scrollY * (r.h - 3)) / maxScroll)
-			glyph = (row - 1 == thumb) and "█" or "░"
-		end
-		overlay.DrawText(glyph, r.x, r.y + row, 1, 1, style)
-		overlay.DrawText(glyph, r.x + r.w - 1, r.y + row, 1, 1, style)
+	if maxScroll == 0 then
+		return
+	end
+	local trackH = r.h - 2
+	local thumbH = math.max(1, math.floor((trackH * box.innerH) / box.totalLines))
+	local thumbY = math.floor((box.scrollY * (trackH - thumbH)) / maxScroll)
+	local thumbStyle = overlay.GetColor("comment")
+	for i = 0, thumbH - 1 do
+		overlay.DrawText("▌", r.x + r.w - 1, r.y + 1 + thumbY + i, 1, 1, thumbStyle)
 	end
 end
 
@@ -290,7 +295,7 @@ local function draw()
 end
 
 local function mouseInside(te)
-	if box == nil or box.rect == nil then
+	if box == nil or box.rect == nil or te == nil then
 		return false
 	end
 	local mx, my = te:Position()
@@ -463,8 +468,10 @@ function prePageDown()
 	return false
 end
 
--- mouse-event hooks receive the tcell event as their single argument
-function preScrollUp(te)
+-- mouse-event hooks receive (bufpane, tcell event): PluginCB prepends the
+-- bufpane, and te is nil when the action was triggered by a key binding
+-- instead of the mouse
+function preScrollUp(bp, te)
 	if box == nil or not mouseInside(te) then
 		return
 	end
@@ -472,7 +479,7 @@ function preScrollUp(te)
 	return false
 end
 
-function preScrollDown(te)
+function preScrollDown(bp, te)
 	if box == nil or not mouseInside(te) then
 		return
 	end
