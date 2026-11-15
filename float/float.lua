@@ -198,7 +198,7 @@ local function position()
 		local cx, cy = sw - box.w - 1, 1
 		if bp ~= nil and bp.Buf ~= nil then
 			local curLoc = bp.Buf:GetActiveCursor().Loc
-			local sl = overlay.BufPaneScreenLoc(bp, buffer.Loc(curLoc.X, curLoc.Y))
+			local sl = bp:ScreenLoc(buffer.Loc(curLoc.X, curLoc.Y))
 			cx, cy = sl.X, sl.Y + 1
 			if cy + box.h >= sh - 1 then
 				cy = sl.Y - box.h

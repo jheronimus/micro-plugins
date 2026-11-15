@@ -574,7 +574,7 @@ end
 -- for 'fg,bg' style definitions).
 function drawDiagSuffix(bp, line, diag, view, onCursorLine)
 	local lineLen = util.CharacterCountInString(util.String(bp.Buf:LineBytes(line)))
-	local endPos = overlay.BufPaneScreenLoc(bp, buffer.Loc(lineLen, line))
+	local endPos = bp:ScreenLoc(buffer.Loc(lineLen, line))
 	if endPos.Y < view.Y or endPos.Y >= view.Y + view.Height then
 		return
 	end
