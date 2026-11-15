@@ -8,6 +8,10 @@ globals:
     any: true
   pending:
     any: true
+  referenceState:
+    any: true
+  closeReferences:
+    any: true
   capabilities:
     any: true
   rootUri:
@@ -115,4 +119,18 @@ globals:
   normalizeContents:
     any: true
   init:
+    any: true
+  parseLine:
+    any: true
+  computeWidths:
+    any: true
+  renderRow:
+    any: true
+  displayToRawCol:
+    any: true
+  addColumn:
+    any: true
+  delColumn:
+    any: true
+  runeLen:
     any: true

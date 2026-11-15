@@ -1,0 +1,13 @@
+[{
+  "Name": "csv",
+  "Description": "Renders CSV/TSV files as aligned tables (line transforms); cells edit in place, columns via commands",
+  "Website": "https://github.com/jheronimus/micro-plugins",
+  "Tags": ["csv", "table"],
+  "Versions": [
+    {
+      "Version": "0.1.0",
+      "Url": "https://github.com/jheronimus/micro-plugins/releases/download/latest/csv.zip",
+      "Require": { "micro": ">=2.0.8" }
+    }
+  ]
+}]
