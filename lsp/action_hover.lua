@@ -18,6 +18,9 @@ local function flattenInline(s)
 	s = s:gsub("%*%*([^*]+)%*%*", "%1")
 	s = s:gsub("%*([^*]+)%*", "%1")
 	s = s:gsub("`([^`]*)`", "%1")
+	-- unescape backslash-escaped punctuation (godoc emits list markers as
+	-- "1\." per CommonMark); escapes before non-punctuation stay literal
+	s = s:gsub("\\(%p)", "%1")
 	return s
 end
 
