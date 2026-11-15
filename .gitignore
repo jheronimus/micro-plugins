@@ -2,3 +2,4 @@
 docs/
 log.txt
 dist/
+csv/*.csv
