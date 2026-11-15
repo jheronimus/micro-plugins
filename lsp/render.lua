@@ -413,8 +413,10 @@ local function flushPara(out, state, width)
 		return
 	end
 	separate(out)
-	for _, segments in ipairs(wrapChunks(state.para, width)) do
-		out[#out + 1] = segmentsEntry(segments)
+	for _, chunks in ipairs(state.para) do
+		for _, segments in ipairs(wrapChunks(chunks, width)) do
+			out[#out + 1] = segmentsEntry(segments)
+		end
 	end
 	state.para = nil
 end
@@ -458,14 +460,20 @@ local function renderHeadingBlock(out, lines, i, width, state)
 	-- strip an ATX closing sequence ("# Title #"), which CommonMark
 	-- requires to be preceded by whitespace
 	content = content:match("^(.-)%s+#+%s*$") or content
-	out[#out + 1] = { text = plainText(decodeEntities(content)), bold = true, color = "constant" }
+	out[#out + 1] = { text = plainText(content), bold = true, color = "constant" }
 	return i + 1
 end
 
 local function renderSetextBlock(out, lines, i, width, state)
 	separate(out)
+	local chunks = {}
+	for _, group in ipairs(state.para) do
+		for _, chunk in ipairs(group) do
+			chunks[#chunks + 1] = chunk
+		end
+	end
 	local parts = {}
-	for _, word in ipairs(splitWords(state.para)) do
+	for _, word in ipairs(splitWords(chunks)) do
 		parts[#parts + 1] = word.text
 	end
 	state.para = nil
@@ -494,7 +502,7 @@ local function renderQuoteBlock(out, lines, i, width, state)
 		quoted[#quoted + 1] = lines[i]:match(LEAD3 .. ">%s?(.*)$")
 		i = i + 1
 	end
-	local text = plainText(decodeEntities(table.concat(quoted, " ")))
+	local text = plainText(table.concat(quoted, " "))
 	if text ~= "" then
 		for _, part in ipairs(wrapChunks({ { text = text } }, math.max(width - 2, 1))) do
 			out[#out + 1] = { text = "│ " .. concatText(part), color = "comment", italic = true }
@@ -553,7 +561,7 @@ local function renderListBlock(out, lines, i, width, state)
 		markerText = (taskMark == " ") and "☐ " or "☑ "
 		content = rest
 	end
-	local chunks = parseInlineText(decodeEntities(content), {}, 0)
+	local chunks = parseInlineText(content, {}, 0)
 	local hang = indentStr .. string.rep(" ", runeCount(markerText))
 	emitWrapped(out, chunks, width, indentStr .. markerText, hang)
 	return i + 1
@@ -602,7 +610,7 @@ local function renderTableBlock(out, lines, i, width, state)
 	local function emitRow(cells, bold)
 		local parts = {}
 		for c = 1, #header do
-			local cell = plainText(decodeEntities(cells[c] or ""))
+			local cell = plainText(cells[c] or "")
 			local pad = string.rep(" ", widths[c] - runeCount(cell))
 			parts[#parts + 1] = "│ " .. cell .. pad .. " "
 		end
@@ -646,10 +654,20 @@ local function renderCodeBlock(out, lines, i, width, state)
 end
 
 local function renderParagraphBlock(out, lines, i, width, state)
-	local chunks = parseInlineText(decodeEntities(trim(lines[i])), {}, 0)
-	for _, chunk in ipairs(chunks) do
-		table.insert(state.para, chunk)
+	local chunks = parseInlineText(trim(lines[i]))
+	if state.para == nil or #state.para == 0 then
+		state.para = { chunks }
+	elseif state.paraHard then
+		table.insert(state.para, chunks)
+	else
+		-- soft break: continue the previous line
+		local last = state.para[#state.para]
+		for _, chunk in ipairs(chunks) do
+			table.insert(last, chunk)
+		end
 	end
+	-- two trailing spaces are a markdown hard line break
+	state.paraHard = lines[i]:match("%s%s$") ~= nil
 	return i + 1
 end
 
@@ -754,17 +772,16 @@ end
 
 local function renderBlocks(text, width)
 	local out = {}
-	local state = { para = nil, counters = {}, lastMarker = {} }
-	local lines = splitLines(text)
+	local state = { para = nil, paraHard = false, counters = {}, lastMarker = {} }
+	-- decode before classification: entity-produced indentation (&nbsp;
+	-- runs from pylsp/basedpyright) must be visible to block parsing
+	local lines = splitLines(decodeEntities(text))
 	local i = 1
 	while i <= #lines do
 		local line = lines[i]
 		local kind = classifyStructural(line, state)
 		if kind == nil then
 			kind = classifyFlow(line, lines, i, state)
-		end
-		if kind == "paragraph" and state.para == nil then
-			state.para = {}
 		end
 		i = blockRenderers[kind](out, lines, i, width, state)
 		if kind ~= "blank" then

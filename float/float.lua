@@ -331,7 +331,9 @@ local lastRect = nil
 
 local function clearRect(r)
 	if r ~= nil then
-		overlay.DrawRect(r.x, r.y, r.w, r.h, config.DefStyle)
+		-- the theme's default group carries the buffer background, so the
+		-- cleared area is seamless with micro's own fill
+		overlay.DrawRect(r.x, r.y, r.w, r.h, overlay.GetColor("default"))
 	end
 end
 

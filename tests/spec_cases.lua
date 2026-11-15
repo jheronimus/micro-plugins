@@ -130,7 +130,12 @@ return {
 		width = 60,
 		expect = { "1. If the operand is a reflect.Value" },
 	},
-	{ name = "pylsp nbsp indentation", md = "&nbsp;&nbsp;&nbsp;&nbsp;bytes", width = 40, expect = { "bytes" } },
+	{
+		name = "pylsp nbsp indentation decodes to indented code",
+		md = "&nbsp;&nbsp;&nbsp;&nbsp;bytes",
+		width = 40,
+		expect = { { text = "  bytes", color = "comment" } },
+	},
 	{ name = "entity named", md = "a &amp; b", width = 40, expect = { "a & b" } },
 	{ name = "entity decimal and hex", md = "&#65;&#x42;C", width = 40, expect = { "ABC" } },
 	{ name = "escaped asterisk stays literal", md = "\\*not bold\\*", width = 40, expect = { "*not bold*" } },
