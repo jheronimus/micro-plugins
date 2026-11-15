@@ -36,10 +36,11 @@ local function shouldIndent(bp, char, line)
 	return false
 end
 
-local function requestCompletion(bp, filetype, file, line, char)
+local function requestCompletion(bp, filetype, file)
 	flushDocumentChange(bp, filetype)
 	local send = withSend(filetype)
 	currentAction[filetype] = { method = "textDocument/completion", response = completionActionResponse }
+	local line, char = requestPosition(bp)
 	send(
 		currentAction[filetype].method,
 		fmt.Sprintf(
@@ -62,7 +63,7 @@ function completionAction(bp, auto)
 		if cmd[filetype] == nil then
 			return
 		end
-		requestCompletion(bp, filetype, bp.Buf.AbsPath, bp.Buf:GetActiveCursor().Y, bp.Buf:GetActiveCursor().X)
+		requestCompletion(bp, filetype, bp.Buf.AbsPath)
 		return
 	end
 
@@ -73,7 +74,7 @@ function completionAction(bp, auto)
 		bp:InsertTab()
 		return
 	end
-	requestCompletion(bp, filetype, bp.Buf.AbsPath, bp.Buf:GetActiveCursor().Y, bp.Buf:GetActiveCursor().X)
+	requestCompletion(bp, filetype, bp.Buf.AbsPath)
 end
 
 local function getTriggerChars(filetype)

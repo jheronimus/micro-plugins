@@ -1,4 +1,5 @@
 local fmt = import("fmt")
+local util = import("micro/util")
 
 function getUriFromBuf(buf)
 	if buf == nil then
@@ -27,9 +28,58 @@ function mysplit(inputstr, sep)
 end
 
 -- escape a string for embedding inside a JSON string literal (didOpen /
--- didChange carry the whole buffer text as one string)
+-- didChange carry the whole buffer text as one string); the specific
+-- escapes first, then any remaining control characters as \uXXXX
 function jsonEscape(s)
-	return s:gsub("\\", "\\\\"):gsub("\n", "\\n"):gsub("\r", "\\r"):gsub('"', '\\"'):gsub("\t", "\\t")
+	return s:gsub("\\", "\\\\")
+		:gsub("\n", "\\n")
+		:gsub("\r", "\\r")
+		:gsub('"', '\\"')
+		:gsub("\t", "\\t")
+		:gsub("[%z\1-\8\11\12\14-\31\127]", function(c)
+			return fmt.Sprintf("\\u%.4x", c:byte())
+		end)
+end
+
+-- ========== LSP position encoding ==========
+-- position.character is UTF-16 code units (the protocol default); micro
+-- cursor columns are runes. Astral-plane runes (>= U+10000) take two
+-- UTF-16 units, everything else takes one.
+
+local RUNE = "[%z\1-\127\194-\244][\128-\191]*"
+
+-- rune column on a line -> UTF-16 column; runeCol nil counts the whole line
+function utf16Column(lineText, runeCol)
+	local units, runes = 0, 0
+	for r in lineText:gmatch(RUNE) do
+		if runeCol ~= nil and runes >= runeCol then
+			break
+		end
+		units = units + ((r:byte(1) >= 240) and 2 or 1)
+		runes = runes + 1
+	end
+	return units
+end
+
+-- UTF-16 column on a line -> rune column; a column landing inside a
+-- surrogate pair snaps to before it, past the end clamps to the line end
+function runeColumn(lineText, utf16col)
+	local units, runes = 0, 0
+	for r in lineText:gmatch(RUNE) do
+		local w = (r:byte(1) >= 240) and 2 or 1
+		if units + w > utf16col then
+			break
+		end
+		units = units + w
+		runes = runes + 1
+	end
+	return runes
+end
+
+-- request position for the active cursor: line number and UTF-16 column
+function requestPosition(bp)
+	local cursor = bp.Buf:GetActiveCursor()
+	return cursor.Y, utf16Column(util.String(bp.Buf:LineBytes(cursor.Y)), cursor.X)
 end
 
 function contains(list, x)

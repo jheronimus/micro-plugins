@@ -11,10 +11,10 @@ local HOVER_MAX_HEIGHT = 28
 function hoverAction(bp)
 	local filetype = bp.Buf:FileType()
 	if cmd[filetype] ~= nil then
+		flushDocumentChange(bp, filetype)
 		local send = withSend(filetype)
 		local file = bp.Buf.AbsPath
-		local line = bp.Buf:GetActiveCursor().Y
-		local char = bp.Buf:GetActiveCursor().X
+		local line, char = requestPosition(bp)
 		currentAction[filetype] = { method = "textDocument/hover", response = hoverActionResponse }
 		send(
 			currentAction[filetype].method,

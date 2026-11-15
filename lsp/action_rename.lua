@@ -14,10 +14,10 @@ end
 
 local function sendRename(bp, newName)
 	local filetype = bp.Buf:FileType()
+	flushDocumentChange(bp, filetype)
 	local send = withSend(filetype)
 	local file = bp.Buf.AbsPath
-	local line = bp.Buf:GetActiveCursor().Y
-	local char = bp.Buf:GetActiveCursor().X
+	local line, char = requestPosition(bp)
 
 	currentAction[filetype] = {
 		method = "textDocument/rename",

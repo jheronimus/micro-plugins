@@ -26,6 +26,14 @@ globals:
     any: true
   jsonEscape:
     any: true
+  utf16Column:
+    any: true
+  runeColumn:
+    any: true
+  requestPosition:
+    any: true
+  docFiletype:
+    any: true
   getUriFromBuf:
     any: true
   contains:

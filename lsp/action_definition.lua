@@ -1,5 +1,6 @@
 local micro = import("micro")
 local buffer = import("micro/buffer")
+local util = import("micro/util")
 local fmt = import("fmt")
 local go_os = import("os")
 
@@ -10,10 +11,10 @@ function definitionAction(bp)
 		return
 	end
 
+	flushDocumentChange(bp, filetype)
 	local send = withSend(filetype)
 	local file = bp.Buf.AbsPath
-	local line = bp.Buf:GetActiveCursor().Y
-	local char = bp.Buf:GetActiveCursor().X
+	local line, char = requestPosition(bp)
 	currentAction[filetype] = { method = "textDocument/definition", response = definitionActionResponse }
 	send(
 		currentAction[filetype].method,
@@ -59,6 +60,7 @@ function definitionActionResponse(bp, data)
 		end
 	end
 	local range = results[1].range or results[1].targetSelectionRange
-	buf:GetActiveCursor():GotoLoc(buffer.Loc(range.start.character, range.start.line))
+	local lineText = util.String(buf:LineBytes(range.start.line))
+	buf:GetActiveCursor():GotoLoc(buffer.Loc(runeColumn(lineText, range.start.character), range.start.line))
 	bp:Center()
 end

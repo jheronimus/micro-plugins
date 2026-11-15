@@ -97,8 +97,7 @@ function signatureAction(bp)
 
 	local send = withSend(filetype)
 	local file = bp.Buf.AbsPath
-	local line = bp.Buf:GetActiveCursor().Y
-	local char = bp.Buf:GetActiveCursor().X
+	local line, char = requestPosition(bp)
 
 	currentAction[filetype] = {
 		method = "textDocument/signatureHelp",

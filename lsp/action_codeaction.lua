@@ -88,11 +88,13 @@ local function getActionRange(bp)
 	if bp.Cursor:HasSelection() then
 		local selStart = cursor.CurSelection[1]
 		local selEnd = cursor.CurSelection[2]
-		return selStart.Y, selStart.X, selEnd.Y, selEnd.X
+		local startText = util.String(bp.Buf:LineBytes(selStart.Y))
+		local endText = util.String(bp.Buf:LineBytes(selEnd.Y))
+		return selStart.Y, utf16Column(startText, selStart.X), selEnd.Y, utf16Column(endText, selEnd.X)
 	end
 	local line = cursor.Y
-	local lineLen = #util.String(bp.Buf:LineBytes(line))
-	return line, 0, line, lineLen
+	local lineText = util.String(bp.Buf:LineBytes(line))
+	return line, 0, line, utf16Column(lineText)
 end
 
 function codeAction(bp)
@@ -102,6 +104,7 @@ function codeAction(bp)
 		return
 	end
 
+	flushDocumentChange(bp, filetype)
 	local send = withSend(filetype)
 	local file = bp.Buf.AbsPath
 	local sLine, sChar, eLine, eChar = getActionRange(bp)

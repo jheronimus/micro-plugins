@@ -13,6 +13,7 @@ currentAction = {}
 capabilities = {}
 rootUri = ""
 version = {}
+docFiletype = {}
 
 local id = {}
 
@@ -168,10 +169,16 @@ function handleInitialized(buf, filetype)
 	if cmd[filetype] == nil then
 		return
 	end
+	local uri = getUriFromBuf(buf)
+	-- didOpen is one-time per document: re-opening a buffer must not reset
+	-- the version (a restarted server clears this state in onExit instead)
+	if version[uri] ~= nil then
+		return
+	end
 	micro.Log("Found running lsp server for ", filetype, "firing textDocument/didOpen...")
 	local send = withSend(filetype)
-	local uri = getUriFromBuf(buf)
 	version[uri] = 1
+	docFiletype[uri] = filetype
 	local content = jsonEscape(util.String(buf:Bytes()))
 	send(
 		"textDocument/didOpen",

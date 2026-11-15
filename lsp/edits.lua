@@ -1,5 +1,6 @@
 local micro = import("micro")
 local buffer = import("micro/buffer")
+local util = import("micro/util")
 
 function sortEdits(edits)
 	table.sort(edits, function(left, right)
@@ -29,8 +30,13 @@ local function countNewlines(str)
 end
 
 function applySingleEdit(pane, edit)
-	local rStart = buffer.Loc(edit.range.start.character, edit.range.start.line)
-	local rEnd = buffer.Loc(edit.range["end"].character, edit.range["end"].line)
+	-- server positions are UTF-16 columns; micro locations are runes. Edits
+	-- are applied back-to-front, so a line's prefix before an earlier edit
+	-- is unchanged by the already-applied later edits and converts correctly.
+	local startText = util.String(pane.Buf:LineBytes(edit.range.start.line))
+	local endText = util.String(pane.Buf:LineBytes(edit.range["end"].line))
+	local rStart = buffer.Loc(runeColumn(startText, edit.range.start.character), edit.range.start.line)
+	local rEnd = buffer.Loc(runeColumn(endText, edit.range["end"].character), edit.range["end"].line)
 	pane.Cursor:GotoLoc(rStart)
 	pane.Cursor:SetSelectionStart(rStart)
 	pane.Cursor:SetSelectionEnd(rEnd)

@@ -209,7 +209,8 @@ function preInsertNewline(bp)
 		local buf, _ = buffer.NewBufferFromFile(doc)
 		bp:AddTab()
 		micro.CurPane():OpenBuffer(buf)
-		buf:GetActiveCursor():GotoLoc(buffer.Loc(character * 1, line * 1))
+		local lineText = util.String(buf:LineBytes(line * 1))
+		buf:GetActiveCursor():GotoLoc(buffer.Loc(runeColumn(lineText, character * 1), line * 1))
 		micro.CurPane():Center()
 		return false
 	end
@@ -265,8 +266,11 @@ local function applyDiagnosticMessage(bp, diagnostic)
 	elseif diagnostic.severity == 2 then
 		mtype = buffer.MTWarning
 	end
-	local mstart = buffer.Loc(diagnostic.range.start.character, diagnostic.range.start.line)
-	local mend = buffer.Loc(diagnostic.range["end"].character, diagnostic.range["end"].line)
+	-- server positions are UTF-16 columns; micro locations are runes
+	local startText = util.String(bp.Buf:LineBytes(diagnostic.range.start.line))
+	local endText = util.String(bp.Buf:LineBytes(diagnostic.range["end"].line))
+	local mstart = buffer.Loc(runeColumn(startText, diagnostic.range.start.character), diagnostic.range.start.line)
+	local mend = buffer.Loc(runeColumn(endText, diagnostic.range["end"].character), diagnostic.range["end"].line)
 
 	if not isIgnoredMessage(diagnostic.message) then
 		local msg = buffer.NewMessage("lsp", diagnostic.message, mstart, mend, mtype)
@@ -456,7 +460,15 @@ function onExit(filetype)
 	return function(str)
 		currentAction[filetype] = nil
 		cmd[filetype] = nil
-		micro.Log("ONEXIT", filetype, str)
+		-- the server is gone: forget its open documents so a restarted
+		-- server receives didOpen again (and version tracking restarts)
+		for uri, ft in pairs(docFiletype) do
+			if ft == filetype then
+				version[uri] = nil
+				docFiletype[uri] = nil
+			end
+		end
+		micro.Log("Server exited:", filetype, str)
 	end
 end
 
