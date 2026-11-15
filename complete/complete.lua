@@ -238,6 +238,15 @@ function preCursorRight()
 	dismiss()
 end
 
+-- a mouse press means the user clicked elsewhere in the buffer: dismiss
+-- (the buffer reverts first, then MousePress moves the cursor)
+function preMousePress()
+	if session == nil then
+		return
+	end
+	dismiss()
+end
+
 function prePageUp()
 	if session == nil then
 		return
