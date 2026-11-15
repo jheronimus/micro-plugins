@@ -168,6 +168,8 @@ end
 
 -- ========== keyboard hooks ==========
 
+-- Tab / Shift-Tab cycle through the Autocomplete actions rather than raw
+-- keys, so user rebinding of those actions keeps working
 function preAutocomplete()
 	if session == nil then
 		return
@@ -184,102 +186,88 @@ function preCycleAutocompleteBack()
 	return false
 end
 
-function preCursorDown()
-	if session == nil then
+-- ========== event capture ==========
+
+-- tcell ButtonMask wheel bits (mouse.go: 1 << iota from Button1)
+local WHEEL_UP = 256
+local WHEEL_DOWN = 512
+
+-- session navigation keys are consumed; editing keys dismiss without
+-- blocking: the buffer reverts first, so the key applies to the user's
+-- own input. Everything unknown passes through — completion is
+-- deliberately non-modal, and user bindings (e.g. the Autocomplete
+-- binding) must keep reaching their actions.
+local sessionKeys = {
+	Escape = function()
+		dismiss()
+		return false
+	end,
+	Up = function()
+		cycle(-1)
+		return false
+	end,
+	Down = function()
+		cycle(1)
+		return false
+	end,
+	Enter = function()
+		accept()
+		return false
+	end,
+	PageUp = function()
+		float.scroll(-PAGE_STEP)
+		return false
+	end,
+	PageDown = function()
+		float.scroll(PAGE_STEP)
+		return false
+	end,
+}
+
+local function handleSessionKey(info)
+	if float.isEditingKey(info) then
+		-- the buffer reverts first, so the key applies to the user's input
+		dismiss()
 		return
 	end
-	cycle(1)
-	return false
+	local handler = sessionKeys[info.name]
+	if handler ~= nil then
+		return handler()
+	end
+	-- unknown keys pass: completion is non-modal, user bindings keep working
 end
 
-function preCursorUp()
-	if session == nil then
-		return
+local function handleSessionMouse(e, info)
+	if info.buttons == 0 then
+		return -- release: the editor resets its own mouse state
 	end
-	cycle(-1)
-	return false
-end
-
-function preInsertNewline()
-	if session == nil then
-		return
+	if info.buttons == WHEEL_UP or info.buttons == WHEEL_DOWN then
+		if float.containsMouse(e) then
+			float.scroll((info.buttons == WHEEL_UP) and -SCROLL_STEP or SCROLL_STEP)
+			return false
+		end
+		return -- wheel outside the menu reaches the buffer
 	end
-	accept()
-	return false
-end
-
-function preEscape()
-	if session == nil then
-		return
-	end
+	-- a mouse press means the user clicked elsewhere in the buffer:
+	-- dismiss (the buffer reverts first, then the click moves the cursor)
 	dismiss()
-	return false
+	return -- the click applies to the buffer
 end
 
--- editing keys dismiss without blocking: the buffer reverts first, so
--- the key applies to the user's own input
-function preRune()
-	dismiss()
-end
-
-function preBackspace()
-	dismiss()
-end
-
-function preDelete()
-	dismiss()
-end
-
-function preCursorLeft()
-	dismiss()
-end
-
-function preCursorRight()
-	dismiss()
-end
-
--- a mouse press means the user clicked elsewhere in the buffer: dismiss
--- (the buffer reverts first, then MousePress moves the cursor)
-function preMousePress()
-	if session == nil then
+-- preAnyEvent handles input while a completion session is open; float
+-- runs in raw mode, so the engine owns the keyboard for the session
+function preAnyEvent(e)
+	if session == nil or float == nil or float.eventInfo == nil then
 		return
 	end
-	dismiss()
-end
-
-function prePageUp()
-	if session == nil then
-		return
+	local info = float.eventInfo(e)
+	if info.kind == "key" then
+		return handleSessionKey(info)
 	end
-	float.scroll(-PAGE_STEP)
-	return false
-end
-
-function prePageDown()
-	if session == nil then
-		return
+	if info.kind == "mouse" then
+		return handleSessionMouse(e, info)
 	end
-	float.scroll(PAGE_STEP)
-	return false
-end
-
--- mouse-event hooks receive (bufpane, tcell event): PluginCB prepends
--- the bufpane, and te is nil when the action was triggered by a key
--- binding instead of the mouse
-function preScrollUp(bp, te)
-	if session == nil or not float.containsMouse(te) then
-		return
-	end
-	float.scroll(-SCROLL_STEP)
-	return false
-end
-
-function preScrollDown(bp, te)
-	if session == nil or not float.containsMouse(te) then
-		return
-	end
-	float.scroll(SCROLL_STEP)
-	return false
+	-- resize, paste and other event kinds pass through
 end
 
 function deinit()

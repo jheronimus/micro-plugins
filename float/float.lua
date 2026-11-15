@@ -371,13 +371,17 @@ local function draw()
 	drawContent()
 end
 
+local function mouseInsidePoint(x, y)
+	local r = box.rect
+	return x >= r.x and x < r.x + r.w and y >= r.y and y < r.y + r.h
+end
+
 local function mouseInside(te)
 	if box == nil or box.rect == nil or te == nil then
 		return false
 	end
 	local mx, my = te:Position()
-	local r = box.rect
-	return mx >= r.x and mx < r.x + r.w and my >= r.y and my < r.y + r.h
+	return mouseInsidePoint(mx, my)
 end
 
 local function buildSource(opts)
@@ -485,129 +489,157 @@ function accept()
 	hide()
 end
 
--- Keyboard hooks: consume the keys a box needs, dismiss on the rest.
--- In raw mode every hook is inert — the caller owns the keyboard.
+-- ========== event capture ==========
+
+-- In raw mode capture is inert — the caller owns the keyboard.
 local function hooksActive()
 	return box ~= nil and not box.raw
 end
 
-function preEscape()
-	if not hooksActive() then
-		return
+-- tcell ButtonMask wheel bits (mouse.go: 1 << iota from Button1)
+local WHEEL_UP = 256
+local WHEEL_DOWN = 512
+
+-- classify a raw tcell event for preAnyEvent handlers; returns a table:
+--   key events:   { kind = "key", name = <tcell key name>, rune = <char> }
+--                 rune keys carry the character in .rune (and .name); other
+--                 names are tcell's ("Escape", "Enter", "Backspace2", "Up",
+--                 "Ctrl+C", ...)
+--   mouse events: { kind = "mouse", buttons = <mask>, x = <col>, y = <row> }
+--   everything else (resize, paste, ...): { kind = "other" }
+function eventInfo(e)
+	local ok, key = pcall(function()
+		return e:Key()
+	end)
+	if ok then
+		local name = e:Name()
+		local info = { kind = "key", name = name }
+		if name:sub(1, 5) == "Rune[" then
+			info.rune = name:sub(6, -2)
+		end
+		return info
 	end
-	hide()
-	return false
+	local okm, buttons = pcall(function()
+		return e:Buttons()
+	end)
+	if okm then
+		local x, y = e:Position()
+		return { kind = "mouse", buttons = buttons, x = x, y = y }
+	end
+	return { kind = "other" }
 end
 
--- a click outside the window dismisses it (menu mode) and the click
--- passes through to the buffer
-function preMousePress(bp, te)
-	if not hooksActive() or te == nil then
-		return
-	end
-	if box.autoclose and not mouseInside(te) then
-		hide()
-	end
-end
-
-function preCursorUp()
-	if not hooksActive() then
-		return
-	end
-	if box.activeItem ~= nil then
-		cycle(-1)
-		return false
-	end
+-- dismiss an autoclose window, leaving the event to reach the buffer
+local function dismissOnKey()
 	if box.autoclose then
 		hide()
 	end
 end
 
-function preCursorDown()
-	if not hooksActive() then
-		return
-	end
-	if box.activeItem ~= nil then
-		cycle(1)
-		return false
-	end
-	if box.autoclose then
-		hide()
-	end
+-- keys that dismiss (autoclose) and then apply to the buffer
+function isEditingKey(info)
+	return info.rune ~= nil
+		or info.name == "Backspace"
+		or info.name == "Backspace2"
+		or info.name == "Delete"
+		or info.name == "Left"
+		or info.name == "Right"
 end
 
-function preInsertNewline()
-	if not hooksActive() then
-		return
+-- Up/Down/Enter move the active item when there is one; otherwise they
+-- dismiss an autoclose window and reach the buffer
+local function navigate(delta)
+	if box.activeItem ~= nil then
+		cycle(delta)
+		return false
 	end
+	dismissOnKey()
+	return
+end
+
+local function activate()
 	if box.activeItem ~= nil then
 		accept()
 		return false
 	end
-	if box.autoclose then
+	dismissOnKey()
+	return
+end
+
+local keyHandlers = {
+	Escape = function()
 		hide()
+		return false
+	end,
+	Up = function()
+		return navigate(-1)
+	end,
+	Down = function()
+		return navigate(1)
+	end,
+	Enter = function()
+		return activate()
+	end,
+	PageUp = function()
+		scroll(-PAGE_STEP)
+		return false
+	end,
+	PageDown = function()
+		scroll(PAGE_STEP)
+		return false
+	end,
+}
+
+local function handleKey(info)
+	if isEditingKey(info) then
+		dismissOnKey()
+		return -- the key applies to the buffer
 	end
-end
-
-local function dismissOnKey()
-	if hooksActive() and box.autoclose then
-		hide()
+	local handler = keyHandlers[info.name]
+	if handler ~= nil then
+		return handler()
 	end
+	-- no menu meaning: consume, so nothing edits the buffer behind the window
+	return false
 end
 
-function preBackspace()
+-- presses inside the window are consumed (unhandled they would land on
+-- the buffer underneath the overlay); clicks outside dismiss autoclose
+-- windows and still reach the buffer
+local function handleMouse(info)
+	if info.buttons == 0 then
+		return -- release: the editor resets its own mouse state
+	end
+	local inside = mouseInsidePoint(info.x, info.y)
+	if info.buttons == WHEEL_UP or info.buttons == WHEEL_DOWN then
+		if inside then
+			scroll((info.buttons == WHEEL_UP) and -SCROLL_STEP or SCROLL_STEP)
+			return false
+		end
+		return -- wheel outside the window passes through
+	end
+	if inside then
+		return false
+	end
 	dismissOnKey()
+	return -- the click applies to the buffer
 end
 
-function preDelete()
-	dismissOnKey()
-end
-
-function preCursorLeft()
-	dismissOnKey()
-end
-
-function preCursorRight()
-	dismissOnKey()
-end
-
-function preRune()
-	dismissOnKey()
-end
-
-function prePageUp()
+-- preAnyEvent captures input while a window is open: in menu mode the
+-- window is modal (unknown keys are consumed instead of leaking into the
+-- buffer); in raw mode every event passes through to the caller
+function preAnyEvent(e)
 	if not hooksActive() then
 		return
 	end
-	scroll(-PAGE_STEP)
-	return false
-end
-
-function prePageDown()
-	if not hooksActive() then
-		return
+	local info = eventInfo(e)
+	if info.kind == "key" then
+		return handleKey(info)
 	end
-	scroll(PAGE_STEP)
-	return false
-end
-
--- mouse-event hooks receive (bufpane, tcell event): PluginCB prepends the
--- bufpane, and te is nil when the action was triggered by a key binding
--- instead of the mouse
-function preScrollUp(bp, te)
-	if not hooksActive() or not mouseInside(te) then
-		return
+	if info.kind == "mouse" then
+		return handleMouse(info)
 	end
-	scroll(-SCROLL_STEP)
-	return false
-end
-
-function preScrollDown(bp, te)
-	if not hooksActive() or not mouseInside(te) then
-		return
-	end
-	scroll(SCROLL_STEP)
-	return false
+	-- resize, paste and other event kinds pass through
 end
 
 function init()
