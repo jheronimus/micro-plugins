@@ -505,13 +505,11 @@ end
 -- the end of that line, colored by severity.
 local DIAG_MSG_MAX = 60
 
+-- severity colors resolve through GetColor: theme group first, with the
+-- standard parser as fallback for plain color names
 local function diagStyle(severity)
 	local color = (severity == 1) and "red" or "yellow"
-	local ok, style = pcall(overlay.StringToStyle, color)
-	if not ok then
-		return overlay.Style()
-	end
-	return style
+	return overlay.GetColor(color)
 end
 
 local function bestDiagForLine(current, d)
