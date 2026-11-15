@@ -323,6 +323,8 @@ local function drawContent()
 	end
 end
 
+local lastRect = nil
+
 local function draw()
 	if box == nil then
 		return
@@ -330,6 +332,18 @@ local function draw()
 	layout()
 	clampScroll()
 	position()
+	if
+		lastRect == nil
+		or lastRect.x ~= box.rect.x
+		or lastRect.y ~= box.rect.y
+		or lastRect.w ~= box.rect.w
+		or lastRect.h ~= box.rect.h
+	then
+		-- the window moved or resized: cells it no longer covers keep
+		-- whatever was last drawn there until a full repaint clears them
+		overlay.Redraw()
+	end
+	lastRect = box.rect
 	overlay.DrawRect(box.rect.x, box.rect.y, box.rect.w, box.rect.h, overlay.Style())
 	if box.border then
 		drawBorder()
@@ -345,6 +359,20 @@ local function mouseInside(te)
 	local mx, my = te:Position()
 	local r = box.rect
 	return mx >= r.x and mx < r.x + r.w and my >= r.y and my < r.y + r.h
+end
+
+local function buildSource(opts)
+	local source = {}
+	if opts.lines ~= nil then
+		for _, l in ipairs(opts.lines) do
+			source[#source + 1] = l
+		end
+	else
+		for seg in ((opts.content or "") .. "\n"):gmatch("(.-)\n") do
+			source[#source + 1] = seg
+		end
+	end
+	return source
 end
 
 function show(opts)
@@ -367,16 +395,16 @@ function show(opts)
 		scrollY = 0,
 		source = {},
 	}
-	if opts.lines ~= nil then
-		for _, l in ipairs(opts.lines) do
-			box.source[#box.source + 1] = l
-		end
-	else
-		for seg in ((opts.content or "") .. "\n"):gmatch("(.-)\n") do
-			box.source[#box.source + 1] = seg
-		end
+	for _, l in ipairs(buildSource(opts)) do
+		box.source[#box.source + 1] = l
 	end
 	box.srcCount = #box.source
+	-- micro repaints only changed cells: force a full redraw so stale
+	-- cells from overlays that stopped drawing (e.g. lsp suppressing its
+	-- diagnostics while this window is open) get cleared
+	if overlay ~= nil then
+		overlay.Redraw()
+	end
 end
 
 function hide()
@@ -386,6 +414,10 @@ function hide()
 		cb()
 	end
 	box = nil
+	lastRect = nil
+	if overlay ~= nil then
+		overlay.Redraw()
+	end
 end
 
 function isActive()
