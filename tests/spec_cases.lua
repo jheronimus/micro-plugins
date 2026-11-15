@@ -109,6 +109,34 @@ return {
 		expect = { "• one two", "  three four" },
 	},
 
+	-- regressions: list items must not swallow surrounding paragraphs
+	{
+		name = "paragraph before list item kept",
+		md = "Some text\n- item",
+		width = 40,
+		expect = { "Some text", "", "• item" },
+	},
+	{
+		name = "list lazy continuation kept",
+		md = "- first item\ncontinuation line\n- second item",
+		width = 40,
+		expect = { "• first item", "", "continuation line", "", "• second item" },
+	},
+	{
+		name = "ordered list honors start number",
+		md = "5. five\n6. six",
+		width = 40,
+		expect = { "5. five", "6. six" },
+	},
+
+	-- inline: escaped literal entity must not be double-decoded
+	{
+		name = "amp-escaped entity stays literal",
+		md = "A &amp;nbsp; B &amp; C",
+		width = 40,
+		expect = { "A &nbsp; B & C" },
+	},
+
 	-- block quotes
 	{
 		name = "block quote",

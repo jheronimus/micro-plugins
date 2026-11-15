@@ -94,11 +94,19 @@ local function charFromCode(cp)
 	)
 end
 
+-- &nbsp; runs are decoded at text-render time, not before block
+-- classification: basedpyright/pylsp indent docstring sections with
+-- them, and decoding early would turn those lines into indented code
+-- blocks (dimmed) instead of prose. decodeEntities parks them behind a
+-- sentinel so "&amp;nbsp;" (an escaped literal) is not re-decoded by fin.
+local SPACE_ENTITY = "\1"
+
 local function decodeEntities(s)
+	s = s:gsub("&nbsp;", SPACE_ENTITY):gsub("&ensp;", SPACE_ENTITY):gsub("&thinsp;", SPACE_ENTITY)
 	s = s:gsub("&#x([%x]+);", function(hex)
 		local cp = tonumber(hex, 16)
 		if cp == nil or cp > 1114111 then
-			return "&#" .. hex .. ";"
+			return "&#x" .. hex .. ";"
 		end
 		return charFromCode(cp)
 	end)
@@ -115,12 +123,8 @@ local function decodeEntities(s)
 	return s
 end
 
--- &nbsp; runs are decoded at text-render time, not before block
--- classification: basedpyright/pylsp indent docstring sections with
--- them, and decoding early would turn those lines into indented code
--- blocks (dimmed) instead of prose
 local function fin(s)
-	return (s:gsub("&nbsp;", " "):gsub("&ensp;", " "):gsub("&thinsp;", " "))
+	return (s:gsub(SPACE_ENTITY, " "))
 end
 
 -- ========== inline parsing ==========
@@ -551,11 +555,12 @@ end
 
 -- per-level list counters; a new marker type restarts its level, and
 -- the marker type is the bullet character or the ordered delimiter —
--- not the number, which changes on every ordered item
+-- not the number, which changes on every ordered item. An ordered list
+-- starts numbering at its first marker's number (CommonMark start attr).
 local function nextMarkerText(state, level, bullet, ordered)
 	local markerType = ordered and bullet:sub(-1, -1) or bullet
 	if state.lastMarker[level] ~= markerType then
-		state.counters[level] = 0
+		state.counters[level] = (ordered and (tonumber(bullet:match("^(%d+)")) or 1) or 1) - 1
 		state.lastMarker[level] = markerType
 	end
 	for deeper = level + 1, 9 do
@@ -570,7 +575,9 @@ local function nextMarkerText(state, level, bullet, ordered)
 end
 
 local function renderListBlock(out, lines, i, width, state)
-	state.para = nil
+	-- a bullet item interrupts a paragraph (CommonMark), but the paragraph
+	-- text must still be emitted: dropping it here silently lost prose
+	flushPara(out, state, width)
 	if not state.listOpen then
 		separate(out)
 		state.listOpen = true
@@ -797,8 +804,9 @@ end
 local function renderBlocks(text, width)
 	local out = {}
 	local state = { para = nil, paraHard = false, counters = {}, lastMarker = {} }
-	-- decode before classification: entity-produced indentation (&nbsp;
-	-- runs from pylsp/basedpyright) must be visible to block parsing
+	-- numeric and named entities decode before classification; the space
+	-- entities stay sentinel-coded until render time so their indentation
+	-- never classifies as an indented code block
 	local lines = splitLines(decodeEntities(text))
 	local i = 1
 	while i <= #lines do
